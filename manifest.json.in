@@ -1,0 +1,39 @@
+{
+  "id": "mcp",
+  "i18n": {
+    "default": {"name": "MCP", "description": "Lets authenticated AI agents capture the OneKVM screen and operate input and available ATX controls through MCP."},
+    "zh": {"name": "MCP", "description": "让经过鉴权的 AI Agent 通过 MCP 截取 OneKVM 屏幕并操作输入设备和可用的 ATX 控制。"},
+    "zh-TW": {"name": "MCP", "description": "讓經過鑑權的 AI Agent 透過 MCP 擷取 OneKVM 螢幕並操作輸入裝置和可用的 ATX 控制。"}
+  },
+  "version": "@VERSION@",
+  "api_version": 2,
+  "architecture": "@ARCH@",
+  "kind": "service",
+  "entrypoint": "bin/onekvm-mcp",
+  "permissions": [],
+  "capabilities": ["video.mjpeg", "hid", "atx"],
+  "services": [{
+    "id": "server",
+    "i18n": {
+      "default": {"name": "MCP server", "description": "Stateless Streamable HTTP MCP endpoint."},
+      "zh": {"name": "MCP 服务", "description": "无状态 Streamable HTTP MCP 端点。"},
+      "zh-TW": {"name": "MCP 服務", "description": "無狀態 Streamable HTTP MCP 端點。"}
+    }
+  }],
+  "icon": {"source": "lucide", "name": "bot"},
+  "page": {"title": "MCP", "renderer": "vue", "entrypoint": "web/page.js", "icon": {"source": "lucide", "name": "bot"}},
+  "routes": [{"path": "", "backend": "unix", "socket": "mcp.sock", "auth": "passthrough"}],
+  "settings_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["endpoint", "capture_timeout_seconds"],
+    "properties": {
+      "endpoint": {"type": "string", "title": "MCP endpoint", "default": "/plugins/mcp", "maxLength": 64, "readOnly": true, "i18n": {"default": "MCP endpoint", "zh": "MCP 端点", "zh-TW": "MCP 端點"}},
+      "access_token": {"type": "string", "title": "Access token (at least 16 characters)", "format": "password", "default": "", "maxLength": 128, "i18n": {"default": "Access token (at least 16 characters)", "zh": "访问令牌（至少 16 个字符）", "zh-TW": "存取權杖（至少 16 個字元）"}},
+      "capture_timeout_seconds": {"type": "integer", "title": "Screen capture timeout (seconds)", "default": 5, "minimum": 1, "maximum": 15, "i18n": {"default": "Screen capture timeout (seconds)", "zh": "屏幕截图超时（秒）", "zh-TW": "螢幕擷取逾時（秒）"}}
+    }
+  },
+  "secret_fields": ["/access_token"],
+  "resource_limits": {"memory_max": "16M", "cpu_quota": "20%", "tasks_max": 4, "limit_nofile": 32},
+  "healthcheck": {"type": "exec", "command": ["bin/onekvm-mcp", "--health"], "timeout_seconds": 5}
+}
