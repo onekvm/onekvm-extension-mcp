@@ -22,3 +22,7 @@ OneKVM 会将 `/plugins/mcp` 请求代理到扩展的私有 Unix Socket。
 每次 MCP 请求都必须携带 `Authorization: Bearer <访问令牌>`。扩展页面可
 生成并保存加密安全的随机静态令牌；保存后，明文只会在复制对话框中显示
 一次。
+
+## 许可证
+
+本项目使用 GNU General Public License v3.0，完整条款见 [`LICENSE`](LICENSE)。

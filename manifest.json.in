@@ -1,4 +1,5 @@
 {
+  "manifest_version": 1,
   "id": "mcp",
   "i18n": {
     "default": {"name": "MCP", "description": "Lets authenticated AI agents capture the OneKVM screen and operate input and available ATX controls through MCP."},
@@ -9,6 +10,8 @@
   "api_version": 2,
   "architecture": "@ARCH@",
   "kind": "service",
+  "author": "OneKVM",
+  "homepage": "https://github.com/onekvm/onekvm-extension-mcp",
   "entrypoint": "bin/onekvm-mcp",
   "permissions": [],
   "capabilities": ["video.mjpeg", "hid", "atx"],
@@ -34,6 +37,7 @@
     }
   },
   "secret_fields": ["/access_token"],
+  "memory_budget": "4M",
   "resource_limits": {"memory_max": "16M", "cpu_quota": "20%", "tasks_max": 4, "limit_nofile": 32},
   "healthcheck": {"type": "exec", "command": ["bin/onekvm-mcp", "--health"], "timeout_seconds": 5}
 }
