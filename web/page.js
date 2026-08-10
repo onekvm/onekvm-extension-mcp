@@ -1,6 +1,6 @@
 (() => {
   const runtime = window.OneKVMPluginUI.v1
-  const { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } = runtime.vue
+  const { computed, defineComponent, h, onBeforeUnmount, ref } = runtime.vue
   const { NAlert, NButton, NInput, NInputNumber, NTag, useDialog, useMessage } = runtime.naive
 
   const messages = {
@@ -25,7 +25,7 @@
       copyFailed: 'Automatic copy failed. Select and copy the token manually.',
       randomFailed: 'The browser cannot provide secure random values.',
     },
-    'zh-CN': {
+    zh: {
       title: 'MCP 连接',
       description: '让经过鉴权的 AI Agent 截取屏幕，并操作键盘、鼠标和可用的 ATX 控制。',
       endpoint: 'MCP 端点',
@@ -68,29 +68,7 @@
       randomFailed: '瀏覽器無法提供安全的隨機數。',
     },
   }
-
-  function resolveLocale(value) {
-    const locale = String(value || '').trim().toLowerCase().replace(/_/g, '-')
-    if (!locale) return ''
-    if (locale === 'en' || locale.startsWith('en-')) return 'en'
-    if (locale !== 'zh' && !locale.startsWith('zh-')) return ''
-    const parts = locale.split('-')
-    return parts.includes('hant') || parts.some((part) => ['tw', 'hk', 'mo'].includes(part))
-      ? 'zh-TW'
-      : 'zh-CN'
-  }
-
-  function detectLocale() {
-    const browserLocales = navigator.languages?.length
-      ? navigator.languages
-      : [navigator.language]
-    const candidates = [document.documentElement.lang, ...browserLocales]
-    for (const candidate of candidates) {
-      const locale = resolveLocale(candidate)
-      if (locale) return locale
-    }
-    return 'en'
-  }
+  const t = runtime.i18n.createTranslator(messages)
 
   function readTimeout(settings) {
     const value = Number(settings?.capture_timeout_seconds)
@@ -133,10 +111,8 @@
       const tokenTouched = ref(false)
       const saving = ref(false)
       const error = ref('')
-      const locale = ref(detectLocale())
       const dialog = useDialog()
       const message = useMessage()
-      const t = (key) => messages[locale.value]?.[key] || messages.en[key] || key
       const endpoint = computed(() => {
         try {
           return new URL('/plugins/mcp', window.location.origin).href
@@ -166,19 +142,7 @@
           error.value = ''
         },
       })
-      const localeObserver = new MutationObserver(() => {
-        locale.value = detectLocale()
-      })
-      onMounted(() => {
-        localeObserver.observe(document.documentElement, {
-          attributes: true,
-          attributeFilter: ['lang'],
-        })
-      })
-      onBeforeUnmount(() => {
-        unregister()
-        localeObserver.disconnect()
-      })
+      onBeforeUnmount(unregister)
 
       function setToken(value) {
         tokenDraft.value = String(value || '')
