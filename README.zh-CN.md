@@ -28,8 +28,8 @@
 安装，然后使用插件管理器控制扩展：
 
 ```sh
-onekvm-plugin-manager enable mcp
-onekvm-plugin-manager disable mcp
+onekvm-extension enable mcp
+onekvm-extension disable mcp
 ```
 
 ## 配置与连接

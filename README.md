@@ -24,8 +24,8 @@ It is installed separately from OneKVM Core, so you can enable, disable, or remo
 The package name is `onekvm-extension-mcp`. Install it through your OneKVM distribution package or image, then use the plugin manager to enable or disable it:
 
 ```sh
-onekvm-plugin-manager enable mcp
-onekvm-plugin-manager disable mcp
+onekvm-extension enable mcp
+onekvm-extension disable mcp
 ```
 
 ## Configure and connect
