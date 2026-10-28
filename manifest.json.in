@@ -18,9 +18,9 @@
   "services": [{
     "id": "server",
     "i18n": {
-      "default": {"name": "MCP server", "description": "Stateless Streamable HTTP MCP endpoint."},
-      "zh": {"name": "MCP 服务", "description": "无状态 Streamable HTTP MCP 端点。"},
-      "zh-TW": {"name": "MCP 服務", "description": "無狀態 Streamable HTTP MCP 端點。"}
+      "default": {"name": "MCP server", "description": "For signed-in AI assistants to connect."},
+      "zh": {"name": "MCP 服务", "description": "供已登录的 AI 助手连接。"},
+      "zh-TW": {"name": "MCP 服務", "description": "供已登入的 AI 助手連線。"}
     }
   }],
   "icon": {"source": "lucide", "name": "bot"},
