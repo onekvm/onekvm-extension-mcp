@@ -1,5 +1,10 @@
+#include "listen.hpp"
+
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <json-c/json.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -42,11 +47,7 @@ struct JsonDelete {
   }
 };
 using Json = std::unique_ptr<json_object, JsonDelete>;
-
-struct Config {
-  std::string access_token;
-  int capture_timeout_seconds = 5;
-};
+using Config = onekvm_mcp::Config;
 
 struct Identity {
   std::string id;
@@ -169,12 +170,39 @@ bool LoadConfig(bool allow_missing, Config &config, std::string &error) {
     }
     config.capture_timeout_seconds = json_object_get_int(timeout);
   }
-  if (config.access_token.size() > 128 ||
-      config.capture_timeout_seconds < 1 || config.capture_timeout_seconds > 15) {
-    error = "MCP configuration is outside the supported range";
-    return false;
+  json_object *mode = nullptr;
+  if (json_object_object_get_ex(root.get(), "listen_mode", &mode)) {
+    if (!json_object_is_type(mode, json_type_string)) {
+      error = "listen_mode must be a string";
+      return false;
+    }
+    config.listen_mode = onekvm_mcp::Trim(json_object_get_string(mode));
   }
-  return true;
+  json_object *interface_name = nullptr;
+  if (json_object_object_get_ex(root.get(), "listen_interface", &interface_name)) {
+    if (!json_object_is_type(interface_name, json_type_string)) {
+      error = "listen_interface must be a string";
+      return false;
+    }
+    config.listen_interface = onekvm_mcp::Trim(json_object_get_string(interface_name));
+  }
+  json_object *listen_address = nullptr;
+  if (json_object_object_get_ex(root.get(), "listen_address", &listen_address)) {
+    if (!json_object_is_type(listen_address, json_type_string)) {
+      error = "listen_address must be a string";
+      return false;
+    }
+    config.listen_address = onekvm_mcp::Trim(json_object_get_string(listen_address));
+  }
+  json_object *port = nullptr;
+  if (json_object_object_get_ex(root.get(), "port", &port)) {
+    if (!json_object_is_type(port, json_type_int)) {
+      error = "port must be an integer";
+      return false;
+    }
+    config.port = json_object_get_int(port);
+  }
+  return onekvm_mcp::ConfigReady(config, error);
 }
 
 bool LoadIdentity(Identity &identity, std::string &error) {
@@ -1005,6 +1033,106 @@ bool Controller(std::string &error) {
   return true;
 }
 
+bool CollectInterfaces(std::vector<onekvm_mcp::InterfaceAddress> &interfaces,
+                       std::string &error) {
+  ifaddrs *list = nullptr;
+  if (getifaddrs(&list) != 0) {
+    error = std::string("read network interfaces: ") + std::strerror(errno);
+    return false;
+  }
+  for (ifaddrs *item = list; item != nullptr; item = item->ifa_next) {
+    if (item->ifa_addr == nullptr || item->ifa_name == nullptr)
+      continue;
+    const int family = item->ifa_addr->sa_family;
+    if (family != AF_INET && family != AF_INET6)
+      continue;
+    onekvm_mcp::InterfaceAddress address;
+    address.name = item->ifa_name;
+    address.length = family == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6);
+    std::memcpy(&address.address, item->ifa_addr, address.length);
+    interfaces.push_back(std::move(address));
+  }
+  freeifaddrs(list);
+  return true;
+}
+
+int ListenUnix(const std::string &path, std::string &error) {
+  if (path.size() >= sizeof(sockaddr_un::sun_path)) {
+    error = "socket path is too long";
+    return -1;
+  }
+  unlink(path.c_str());
+  const int listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+  if (listener < 0) {
+    error = std::string("create listener: ") + std::strerror(errno);
+    return -1;
+  }
+  sockaddr_un address{};
+  address.sun_family = AF_UNIX;
+  std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
+  if (bind(listener, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0 ||
+      chmod(path.c_str(), 0660) < 0 || listen(listener, 8) < 0) {
+    error = std::string("bind listener: ") + std::strerror(errno);
+    close(listener);
+    unlink(path.c_str());
+    return -1;
+  }
+  return listener;
+}
+
+int ListenTCP(const Config &config, std::string &error) {
+  std::vector<onekvm_mcp::InterfaceAddress> interfaces;
+  if (config.listen_mode == "interface" && !CollectInterfaces(interfaces, error))
+    return -1;
+  sockaddr_storage address{};
+  socklen_t length = 0;
+  if (!onekvm_mcp::ResolveListen(config, interfaces, address, length, error))
+    return -1;
+  const int listener =
+      socket(address.ss_family, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+  if (listener < 0) {
+    error = std::string("create TCP listener: ") + std::strerror(errno);
+    return -1;
+  }
+  const int enabled = 1;
+  if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled)) < 0) {
+    error = std::string("prepare TCP listener: ") + std::strerror(errno);
+    close(listener);
+    return -1;
+  }
+  if (address.ss_family == AF_INET6 &&
+      setsockopt(listener, IPPROTO_IPV6, IPV6_V6ONLY, &enabled, sizeof(enabled)) < 0) {
+    error = std::string("prepare TCP listener: ") + std::strerror(errno);
+    close(listener);
+    return -1;
+  }
+  if (bind(listener, reinterpret_cast<sockaddr *>(&address), length) < 0 ||
+      listen(listener, 8) < 0) {
+    error = "listen on " + std::to_string(config.port) + ": " + std::strerror(errno);
+    close(listener);
+    return -1;
+  }
+  return listener;
+}
+
+bool AcceptReady(int listener, const Config &config, const Identity &identity,
+                 ScreenGeometry &screen) {
+  while (!stopped) {
+    const int client = accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
+    if (client < 0) {
+      if (errno == EINTR)
+        continue;
+      if (errno == EAGAIN || errno == EWOULDBLOCK)
+        return true;
+      std::cerr << "onekvm-mcp: accept: " << std::strerror(errno) << '\n';
+      return false;
+    }
+    HandleClient(client, config, identity, screen);
+    close(client);
+  }
+  return true;
+}
+
 int Serve() {
   std::string error;
   Config config;
@@ -1024,42 +1152,52 @@ int Serve() {
   sigaction(SIGTERM, &action, nullptr);
 
   const std::string path = SocketPath();
-  unlink(path.c_str());
-  const int listener = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (listener < 0) {
-    std::cerr << "onekvm-mcp: create listener: " << std::strerror(errno) << '\n';
+  const int unix_listener = ListenUnix(path, error);
+  if (unix_listener < 0) {
+    std::cerr << "onekvm-mcp: " << error << '\n';
     return 1;
   }
-  sockaddr_un address{};
-  address.sun_family = AF_UNIX;
-  if (path.size() >= sizeof(address.sun_path)) {
-    std::cerr << "onekvm-mcp: socket path is too long\n";
-    close(listener);
-    return 1;
-  }
-  std::memcpy(address.sun_path, path.c_str(), path.size() + 1);
-  if (bind(listener, reinterpret_cast<sockaddr *>(&address), sizeof(address)) < 0 ||
-      chmod(path.c_str(), 0660) < 0 || listen(listener, 8) < 0) {
-    std::cerr << "onekvm-mcp: bind listener: " << std::strerror(errno) << '\n';
-    close(listener);
+  const int tcp_listener = ListenTCP(config, error);
+  if (tcp_listener < 0) {
+    std::cerr << "onekvm-mcp: " << error << '\n';
+    close(unix_listener);
     unlink(path.c_str());
     return 1;
   }
   ScreenGeometry screen;
-  while (!stopped) {
-    const int client = accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
-    if (client < 0) {
+  pollfd listeners[2] = {
+      {unix_listener, POLLIN, 0},
+      {tcp_listener, POLLIN, 0},
+  };
+  bool failed = false;
+  while (!stopped && !failed) {
+    const int ready = poll(listeners, 2, 1000);
+    if (ready < 0) {
       if (errno == EINTR)
         continue;
-      std::cerr << "onekvm-mcp: accept: " << std::strerror(errno) << '\n';
+      std::cerr << "onekvm-mcp: poll: " << std::strerror(errno) << '\n';
+      failed = true;
       break;
     }
-    HandleClient(client, config, identity, screen);
-    close(client);
+    if (ready == 0)
+      continue;
+    for (const pollfd &listener : listeners) {
+      if ((listener.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+        std::cerr << "onekvm-mcp: listener failed\n";
+        failed = true;
+        break;
+      }
+      if ((listener.revents & POLLIN) != 0 &&
+          !AcceptReady(listener.fd, config, identity, screen)) {
+        failed = true;
+        break;
+      }
+    }
   }
-  close(listener);
+  close(unix_listener);
+  close(tcp_listener);
   unlink(path.c_str());
-  return stopped ? 0 : 1;
+  return stopped && !failed ? 0 : 1;
 }
 
 } // namespace

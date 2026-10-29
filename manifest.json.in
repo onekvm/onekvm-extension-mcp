@@ -13,7 +13,7 @@
   "author": "OneKVM",
   "homepage": "https://github.com/onekvm/onekvm-extension-mcp",
   "entrypoint": "bin/onekvm-mcp",
-  "permissions": [],
+  "permissions": ["network", "network-info"],
   "capabilities": ["video.mjpeg", "hid", "atx"],
   "services": [{
     "id": "server",
@@ -29,9 +29,13 @@
   "settings_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["endpoint", "capture_timeout_seconds"],
+    "required": ["endpoint", "listen_mode", "port", "capture_timeout_seconds"],
     "properties": {
       "endpoint": {"type": "string", "title": "MCP endpoint", "default": "/plugins/mcp", "maxLength": 64, "readOnly": true, "i18n": {"default": "MCP endpoint", "zh": "MCP 端点", "zh-TW": "MCP 端點"}},
+      "listen_mode": {"type": "string", "title": "Listen interface", "enum": ["all", "interface", "address"], "default": "all", "i18n": {"default": "Listen interface", "zh": "监听接口", "zh-TW": "監聽介面"}},
+      "listen_interface": {"type": "string", "title": "Interface", "default": "", "maxLength": 15, "enabled_when": {"field": "listen_mode", "equals": "interface"}, "required_when": {"field": "listen_mode", "equals": "interface"}, "i18n": {"default": "Interface", "zh": "接口", "zh-TW": "介面"}},
+      "listen_address": {"type": "string", "title": "IP address", "default": "", "maxLength": 64, "enabled_when": {"field": "listen_mode", "equals": "address"}, "required_when": {"field": "listen_mode", "equals": "address"}, "i18n": {"default": "IP address", "zh": "IP 地址", "zh-TW": "IP 位址"}},
+      "port": {"type": "integer", "title": "Port", "default": 9710, "minimum": 1024, "maximum": 65535, "i18n": {"default": "Port", "zh": "端口", "zh-TW": "連接埠"}},
       "access_token": {"type": "string", "title": "Access token (at least 16 characters)", "format": "password", "default": "", "maxLength": 128, "i18n": {"default": "Access token (at least 16 characters)", "zh": "访问令牌（至少 16 个字符）", "zh-TW": "存取權杖（至少 16 個字元）"}},
       "capture_timeout_seconds": {"type": "integer", "title": "Screen capture timeout (seconds)", "default": 5, "minimum": 1, "maximum": 15, "i18n": {"default": "Screen capture timeout (seconds)", "zh": "屏幕截图超时（秒）", "zh-TW": "螢幕擷取逾時（秒）"}}
     }

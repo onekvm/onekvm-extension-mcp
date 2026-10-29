@@ -36,12 +36,22 @@ onekvm-extension disable mcp
 
 打开 OneKVM 中的 MCP 扩展页面并配置：
 
+- **监听接口：** 选择 `0.0.0.0`、一个网络接口，或填写 IP 地址。选择网络接口时，
+  服务监听该接口的地址。已有配置会继续监听 `0.0.0.0`。
+- **端口：** 选择 1024 到 65535 的 TCP 端口，默认 9710。已有配置使用这个端口。
 - **访问令牌：** 自行填写 16–128 个字符的令牌，也可以让浏览器生成一个
   密码学安全的 64 字符令牌。生成的令牌保存后只显示一次，请立即复制并
   安全保存。
 - **屏幕截图超时：** 服务等待视频帧的时间，可设为 1 到 15 秒，默认 5 秒。
 
-将 MCP 客户端连接到：
+将 MCP 客户端连接到页面上显示的直接地址：
+
+```text
+http://<设备地址>:<端口>/
+```
+
+监听接口为 `0.0.0.0` 时，使用设备上可访问的地址和所配置的端口。直接地址
+使用 HTTP。也可以继续使用 OneKVM 网页地址：
 
 ```text
 https://<你的-onekvm-地址>/plugins/mcp
@@ -80,7 +90,7 @@ Authorization: Bearer <访问令牌>
 
 ## 实现说明
 
-- OneKVM 在 `/plugins/mcp` 发布扩展，并把请求代理到私有 Unix Socket。
+- OneKVM 在 `/plugins/mcp` 发布扩展，并把请求代理到私有 Unix Socket。服务也在配置的 TCP 地址和端口上接受同样的请求。
 - C++20 服务实现无状态 Streamable HTTP，以及 MCP 的 `initialize`、`ping`、
   `tools/list` 和 `tools/call` 方法。
 - 截图来自 OneKVM 的 MJPEG 媒体 API；键盘、鼠标和 ATX 操作通过已鉴权的

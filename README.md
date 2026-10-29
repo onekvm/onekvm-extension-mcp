@@ -32,10 +32,18 @@ onekvm-extension disable mcp
 
 Open the MCP extension page in OneKVM and configure:
 
+- **Listen interface:** choose `0.0.0.0`, one network interface, or an IP address. A network interface listens on that interface's address. An existing configuration keeps listening on `0.0.0.0`.
+- **Port:** choose a TCP port from 1024 to 65535. The default is 9710. An existing configuration uses this port.
 - **Access token:** enter a custom token of 16–128 characters, or generate a cryptographically secure 64-character token in the browser. A generated token is shown only once after it is saved, so copy it immediately and store it securely.
 - **Screen capture timeout:** choose how long the server waits for a video frame, from 1 to 15 seconds. The default is 5 seconds.
 
-Point your MCP client at:
+Point your MCP client at the direct address shown on the page:
+
+```text
+http://<device-address>:<port>/
+```
+
+When the listen interface is `0.0.0.0`, use a reachable address of the device with the configured port. The direct address uses HTTP. You can also keep using the OneKVM web address:
 
 ```text
 https://<your-onekvm-host>/plugins/mcp
@@ -70,7 +78,7 @@ Call `screen_capture` before `mouse_move`. Coordinates start at `0,0` in the top
 
 ## How it works
 
-- OneKVM publishes the extension at `/plugins/mcp` and proxies requests to its private Unix socket.
+- OneKVM publishes the extension at `/plugins/mcp` and proxies requests to its private Unix socket. The service also accepts the same requests on the configured TCP address and port.
 - The C++20 service implements stateless Streamable HTTP and the MCP `initialize`, `ping`, `tools/list`, and `tools/call` methods.
 - Screen captures come from OneKVM's MJPEG media API; keyboard, mouse, and ATX operations go through the authenticated extension control API.
 - The bearer token is stored as a secret extension setting and compared in constant time for every MCP request.

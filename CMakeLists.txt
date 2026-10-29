@@ -25,6 +25,10 @@ target_compile_options(onekvm-mcp PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(onekvm-mcp PRIVATE ${JSON_C_INCLUDE_DIRS})
 target_link_libraries(onekvm-mcp PRIVATE ${JSON_C_STATIC_LIBRARY} m)
 
+add_executable(onekvm-mcp-listen-test tests/listen_test.cpp)
+target_compile_options(onekvm-mcp-listen-test PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(onekvm-mcp-listen-test PRIVATE src)
+
 set(VERSION "${ONEKVM_EXTENSION_VERSION}")
 set(ARCH "${ONEKVM_EXTENSION_ARCH}")
 configure_file(manifest.json.in manifest.json @ONLY)

@@ -1,13 +1,24 @@
 (() => {
   const runtime = window.OneKVMPluginUI.v1
-  const { computed, defineComponent, h, onBeforeUnmount, ref } = runtime.vue
-  const { NAlert, NButton, NInput, NInputNumber, NTag, useDialog, useMessage } = runtime.naive
+  const { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } = runtime.vue
+  const { NAlert, NButton, NInput, NInputNumber, NSelect, NTag, useDialog, useMessage } = runtime.naive
 
   const messages = {
     en: {
       title: 'MCP connection',
       description: 'Let authenticated AI agents capture the screen and operate the keyboard, mouse, and available ATX controls.',
       endpoint: 'MCP endpoint',
+      listen: 'Listen interface',
+      listenHint: 'Choose 0.0.0.0, a network interface, or an IP address.',
+      listenAll: 'All interfaces (0.0.0.0)',
+      listenInterface: 'Interface',
+      listenAddress: 'IP address',
+      interfacePlaceholder: 'Choose an interface',
+      addressPlaceholder: 'Enter an IP address',
+      port: 'Port',
+      direct: 'Direct address',
+      directHint: 'MCP clients connect to this address and port with the access token. This address uses HTTP.',
+      interfacesFailed: 'Network interfaces did not load.',
       token: 'Access token',
       tokenHint: 'Enter 16–128 characters, or generate one in this browser.',
       tokenPlaceholder: 'Enter a custom token',
@@ -29,6 +40,17 @@
       title: 'MCP 连接',
       description: '让经过鉴权的 AI Agent 截取屏幕，并操作键盘、鼠标和可用的 ATX 控制。',
       endpoint: 'MCP 端点',
+      listen: '监听接口',
+      listenHint: '可以选择 0.0.0.0、一个网络接口，或填写 IP 地址。',
+      listenAll: '所有接口（0.0.0.0）',
+      listenInterface: '选择接口',
+      listenAddress: 'IP 地址',
+      interfacePlaceholder: '选择接口',
+      addressPlaceholder: '输入 IP 地址',
+      port: '端口',
+      direct: '直接地址',
+      directHint: 'MCP 客户端使用访问令牌连接这个地址和端口。这个地址使用 HTTP。',
+      interfacesFailed: '网络接口没有加载出来。',
       token: '访问令牌',
       tokenHint: '输入 16–128 个字符，或在浏览器里生成一个。',
       tokenPlaceholder: '输入自定义令牌',
@@ -50,6 +72,17 @@
       title: 'MCP 連線',
       description: '讓經過鑑權的 AI Agent 擷取螢幕，並操作鍵盤、滑鼠和可用的 ATX 控制。',
       endpoint: 'MCP 端點',
+      listen: '監聽介面',
+      listenHint: '可以選擇 0.0.0.0、一個網路介面，或填寫 IP 位址。',
+      listenAll: '所有介面（0.0.0.0）',
+      listenInterface: '選擇介面',
+      listenAddress: 'IP 位址',
+      interfacePlaceholder: '選擇介面',
+      addressPlaceholder: '輸入 IP 位址',
+      port: '連接埠',
+      direct: '直接位址',
+      directHint: 'MCP 用戶端使用存取權杖連線這個位址和連接埠。這個位址使用 HTTP。',
+      interfacesFailed: '網路介面沒有載入。',
       token: '存取權杖',
       tokenHint: '輸入 16–128 個字元，或在瀏覽器裡產生一個。',
       tokenPlaceholder: '輸入自訂權杖',
@@ -73,6 +106,62 @@
   function readTimeout(settings) {
     const value = Number(settings?.capture_timeout_seconds)
     return Number.isInteger(value) && value >= 1 && value <= 15 ? value : 5
+  }
+
+  function readMode(settings) {
+    const value = settings?.listen_mode
+    return value === 'interface' || value === 'address' ? value : 'all'
+  }
+
+  function readPort(settings) {
+    const value = Number(settings?.port)
+    return Number.isInteger(value) && value >= 1024 && value <= 65535 ? value : 9710
+  }
+
+  function readText(settings, name) {
+    const value = settings?.[name]
+    return typeof value === 'string' ? value : ''
+  }
+
+  function validInterfaceName(value) {
+    return /^[A-Za-z][A-Za-z0-9_.:-]{0,14}$/.test(value)
+  }
+
+  function validIP(value) {
+    if (!value || value.includes('%') || value.includes('/') || /\s/.test(value)) return false
+    if (value.includes('.')) {
+      const parts = value.split('.')
+      if (parts.length !== 4 || value.includes(':')) return false
+      return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255 && String(Number(part)) === String(Number(part)) && !(part.length > 1 && part.startsWith('0')))
+    }
+    if (!value.includes(':')) return false
+    try {
+      const url = new URL(`http://[${value}]/`)
+      return url.hostname === `[${value}]` || url.hostname.toLowerCase() === value.toLowerCase()
+    } catch (_) {
+      return false
+    }
+  }
+
+  function addressText(value) {
+    return String(value || '').replace(/\/\d+$/, '')
+  }
+
+  function formatHost(host) {
+    if (!host) return ''
+    return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+  }
+
+  function apiURL(path) {
+    const base = document.querySelector('meta[name="onekvm-service-base"]')?.content || ''
+    if (!base) return path
+    try {
+      const url = new URL(base, window.location.origin)
+      if (url.origin !== window.location.origin || !url.pathname.startsWith('/device-ui/')) return path
+      return `${url.href.replace(/\/$/, '')}${path}`
+    } catch (_) {
+      return path
+    }
   }
 
   function randomToken(errorMessage) {
@@ -104,9 +193,20 @@
     name: 'MCPPage',
     props: { host: { type: Object, required: true } },
     setup(props) {
-      const initialTimeout = readTimeout(props.host.extension.value.settings)
+      const initial = props.host.extension.value.settings || {}
+      const initialTimeout = readTimeout(initial)
       const captureTimeout = ref(initialTimeout)
       const savedTimeout = ref(initialTimeout)
+      const listenMode = ref(readMode(initial))
+      const savedMode = ref(listenMode.value)
+      const listenInterface = ref(readText(initial, 'listen_interface'))
+      const savedInterface = ref(listenInterface.value)
+      const listenAddress = ref(readText(initial, 'listen_address'))
+      const savedAddress = ref(listenAddress.value)
+      const listenPort = ref(readPort(initial))
+      const savedPort = ref(listenPort.value)
+      const interfaces = ref([])
+      const interfaceError = ref('')
       const tokenDraft = ref('')
       const tokenTouched = ref(false)
       const saving = ref(false)
@@ -120,16 +220,56 @@
           return '/plugins/mcp'
         }
       })
+      const interfaceOptions = computed(() => {
+        const options = interfaces.value
+          .filter((item) => item && validInterfaceName(item.name))
+          .map((item) => {
+            const addresses = (item.addresses || []).map(addressText).filter(Boolean)
+            const address = addresses.find((value) => value.includes('.')) || addresses[0]
+            return { value: item.name, label: address ? `${item.name} · ${address}` : item.name }
+          })
+        if (listenInterface.value && !options.some((item) => item.value === listenInterface.value))
+          options.unshift({ value: listenInterface.value, label: listenInterface.value })
+        return options
+      })
+      const directHost = computed(() => {
+        if (listenMode.value === 'interface') {
+          const selected = interfaces.value.find((item) => item?.name === listenInterface.value)
+          const addresses = (selected?.addresses || []).map(addressText).filter(Boolean)
+          return addresses.find((value) => value.includes('.')) || addresses[0] || ''
+        }
+        if (listenMode.value === 'address') return listenAddress.value.trim()
+        return window.location.hostname || '0.0.0.0'
+      })
+      const directEndpoint = computed(() => {
+        const host = formatHost(directHost.value)
+        return host && Number.isInteger(listenPort.value) ? `http://${host}:${listenPort.value}/` : ''
+      })
       const configured = computed(() => props.host.extension.value.secrets_configured?.includes('/access_token') === true)
-      const dirty = computed(() => tokenTouched.value || captureTimeout.value !== savedTimeout.value)
-      const valid = computed(() => Number.isInteger(captureTimeout.value) && captureTimeout.value >= 1 && captureTimeout.value <= 15 &&
+      const listenValid = computed(() => {
+        if (!Number.isInteger(listenPort.value) || listenPort.value < 1024 || listenPort.value > 65535) return false
+        if (listenMode.value === 'interface') return validInterfaceName(listenInterface.value)
+        if (listenMode.value === 'address') return validIP(listenAddress.value.trim())
+        return listenMode.value === 'all'
+      })
+      const dirty = computed(() => tokenTouched.value || captureTimeout.value !== savedTimeout.value ||
+        listenMode.value !== savedMode.value || listenInterface.value !== savedInterface.value ||
+        listenAddress.value !== savedAddress.value || listenPort.value !== savedPort.value)
+      const valid = computed(() => listenValid.value && Number.isInteger(captureTimeout.value) &&
+        captureTimeout.value >= 1 && captureTimeout.value <= 15 &&
         (!tokenTouched.value || (tokenDraft.value.length >= 16 && tokenDraft.value.length <= 128)))
       const unregister = props.host.registerSettings({
         dirty,
         valid,
         showHostActions: false,
         collect: () => {
-          const settings = { capture_timeout_seconds: captureTimeout.value }
+          const settings = {
+            capture_timeout_seconds: captureTimeout.value,
+            listen_mode: listenMode.value,
+            listen_interface: listenInterface.value,
+            listen_address: listenAddress.value.trim(),
+            port: listenPort.value,
+          }
           if (tokenTouched.value) settings.access_token = tokenDraft.value
           return settings
         },
@@ -137,12 +277,30 @@
           const timeout = readTimeout(settings)
           captureTimeout.value = timeout
           savedTimeout.value = timeout
+          listenMode.value = readMode(settings)
+          savedMode.value = listenMode.value
+          listenInterface.value = readText(settings, 'listen_interface')
+          savedInterface.value = listenInterface.value
+          listenAddress.value = readText(settings, 'listen_address')
+          savedAddress.value = listenAddress.value
+          listenPort.value = readPort(settings)
+          savedPort.value = listenPort.value
           tokenDraft.value = ''
           tokenTouched.value = false
           error.value = ''
         },
       })
       onBeforeUnmount(unregister)
+      onMounted(async () => {
+        try {
+          const response = await fetch(apiURL('/api/network/interfaces'), { credentials: 'same-origin', cache: 'no-store' })
+          if (!response.ok) throw new Error(t('interfacesFailed'))
+          const data = await response.json()
+          interfaces.value = Array.isArray(data) ? data : []
+        } catch (_) {
+          interfaceError.value = t('interfacesFailed')
+        }
+      })
 
       function setToken(value) {
         tokenDraft.value = String(value || '')
@@ -208,6 +366,61 @@
         h('h2', t('title')),
         h('p', { class: 'mcp-description' }, t('description')),
         error.value ? h(NAlert, { type: 'error', showIcon: false }, { default: () => error.value }) : null,
+        interfaceError.value ? h(NAlert, { type: 'warning', showIcon: false }, { default: () => interfaceError.value }) : null,
+        h('article', { class: 'mcp-card' }, [
+          h('label', { class: 'mcp-field' }, [
+            h('span', t('listen')),
+            h(NSelect, {
+              value: listenMode.value,
+              options: [
+                { label: t('listenAll'), value: 'all' },
+                { label: t('listenInterface'), value: 'interface' },
+                { label: t('listenAddress'), value: 'address' },
+              ],
+              disabled: saving.value,
+              'onUpdate:value': (value) => { listenMode.value = value === 'interface' || value === 'address' ? value : 'all' },
+            }),
+            h('small', t('listenHint')),
+          ]),
+          h('label', { class: 'mcp-field' }, [
+            h('span', t('port')),
+            h(NInputNumber, {
+              value: listenPort.value,
+              min: 1024,
+              max: 65535,
+              precision: 0,
+              disabled: saving.value,
+              'onUpdate:value': (value) => { listenPort.value = value },
+            }),
+          ]),
+          listenMode.value === 'interface' ? h('label', { class: 'mcp-field mcp-span' }, [
+            h('span', t('listenInterface')),
+            h(NSelect, {
+              value: listenInterface.value || null,
+              options: interfaceOptions.value,
+              placeholder: t('interfacePlaceholder'),
+              filterable: true,
+              disabled: saving.value,
+              'onUpdate:value': (value) => { listenInterface.value = String(value || '') },
+            }),
+          ]) : null,
+          listenMode.value === 'address' ? h('label', { class: 'mcp-field mcp-span' }, [
+            h('span', t('listenAddress')),
+            h(NInput, {
+              value: listenAddress.value,
+              placeholder: t('addressPlaceholder'),
+              maxlength: 64,
+              disabled: saving.value,
+              status: listenAddress.value && !validIP(listenAddress.value.trim()) ? 'error' : undefined,
+              'onUpdate:value': (value) => { listenAddress.value = String(value || '') },
+            }),
+          ]) : null,
+          h('label', { class: 'mcp-field mcp-span' }, [
+            h('span', t('direct')),
+            h(NInput, { value: directEndpoint.value, readonly: true }),
+            h('small', t('directHint')),
+          ]),
+        ]),
         h('article', { class: 'mcp-card' }, [
           h('label', { class: 'mcp-field' }, [
             h('span', t('endpoint')),
@@ -258,10 +471,12 @@
     styles: [`
       .mcp-page { display: grid; gap: 14px; }
       .mcp-page h2 { margin: 0; font-size: 18px; }
-      .mcp-description, .mcp-hint { margin: 0; color: var(--n-text-color-3, #888); }
+      .mcp-description, .mcp-hint, .mcp-field small { margin: 0; color: var(--n-text-color-3, #888); }
+      .mcp-field small { font-size: 12px; line-height: 1.45; }
       .mcp-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr); gap: 14px; padding: 14px; border: 1px solid var(--n-border-color, #444); border-radius: 8px; background: transparent; }
       .mcp-token-card { grid-template-columns: 1fr; }
       .mcp-field { display: grid; gap: 7px; }
+      .mcp-span { grid-column: 1 / -1; }
       .mcp-field > span { font-size: 13px; font-weight: 600; }
       .mcp-token-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .mcp-token-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
