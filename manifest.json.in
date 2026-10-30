@@ -18,14 +18,14 @@
   "services": [{
     "id": "server",
     "i18n": {
-      "default": {"name": "MCP server", "description": "For signed-in AI assistants to connect."},
-      "zh": {"name": "MCP 服务", "description": "供已登录的 AI 助手连接。"},
-      "zh-TW": {"name": "MCP 服務", "description": "供已登入的 AI 助手連線。"}
+      "default": {"name": "MCP server", "description": "Accepts AI assistants that present the access token."},
+      "zh": {"name": "MCP 服务", "description": "供持有访问令牌的 AI 助手连接。"},
+      "zh-TW": {"name": "MCP 服務", "description": "供持有存取權杖的 AI 助手連線。"}
     }
   }],
   "icon": {"source": "lucide", "name": "bot"},
   "page": {"title": "MCP", "renderer": "vue", "entrypoint": "web/page.js", "icon": {"source": "lucide", "name": "bot"}},
-  "routes": [{"path": "", "backend": "unix", "socket": "mcp.sock", "auth": "passthrough"}],
+  "routes": [{"path": "", "backend": "unix", "socket": "mcp.sock", "auth": "public"}],
   "settings_schema": {
     "type": "object",
     "additionalProperties": false,

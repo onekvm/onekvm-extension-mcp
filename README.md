@@ -49,7 +49,7 @@ When the listen interface is `0.0.0.0`, use a reachable address of the device wi
 https://<your-onekvm-host>/plugins/mcp
 ```
 
-Every request must include the configured token:
+Every request must include the configured token. The web address checks only this token. A device login is not required.
 
 ```http
 Authorization: Bearer <access-token>

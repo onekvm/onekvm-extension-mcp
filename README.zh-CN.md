@@ -57,7 +57,7 @@ http://<设备地址>:<端口>/
 https://<你的-onekvm-地址>/plugins/mcp
 ```
 
-每次请求都必须携带已配置的令牌：
+每次请求都必须携带已配置的令牌。网页地址只检查这个令牌，不需要设备登录。
 
 ```http
 Authorization: Bearer <访问令牌>
