@@ -25,7 +25,7 @@
   }],
   "icon": {"source": "lucide", "name": "bot"},
   "page": {"title": "MCP", "renderer": "vue", "entrypoint": "web/page.js", "icon": {"source": "lucide", "name": "bot"}},
-  "routes": [{"path": "", "backend": "unix", "socket": "mcp.sock", "auth": "public"}],
+  "routes": [{"path": "", "backend": "unix", "socket": "mcp.sock", "auth": "passthrough"}],
   "settings_schema": {
     "type": "object",
     "additionalProperties": false,
