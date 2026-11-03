@@ -24,6 +24,9 @@ struct Config {
   std::string listen_interface;
   std::string listen_address;
   int port = kDefaultPort;
+  std::string tool_default_policy = "allow";
+  std::string tool_allowed_plugins;
+  std::string tool_denied_plugins;
 };
 
 struct InterfaceAddress {

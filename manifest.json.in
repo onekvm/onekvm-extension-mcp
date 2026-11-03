@@ -14,7 +14,8 @@
   "homepage": "https://github.com/onekvm/onekvm-extension-mcp",
   "entrypoint": "bin/onekvm-mcp",
   "permissions": ["network", "network-info"],
-  "capabilities": ["video.mjpeg", "hid", "atx"],
+  "capabilities": ["video.mjpeg", "hid", "atx", "extensions.contributions"],
+  "extension_points": [{"id": "mcp.tool", "version": 1}],
   "services": [{
     "id": "server",
     "i18n": {
@@ -31,6 +32,9 @@
     "additionalProperties": false,
     "required": ["endpoint", "listen_mode", "port", "capture_timeout_seconds"],
     "properties": {
+      "tool_default_policy": {"type": "string", "title": "Default tool access", "enum": ["allow", "deny"], "default": "allow", "i18n": {"default": "Default tool access", "zh": "默认工具接入", "zh-TW": "預設工具接入"}},
+      "tool_allowed_plugins": {"type": "string", "title": "Allowed plugins", "default": "", "maxLength": 4096, "i18n": {"default": "Allowed plugins", "zh": "允许的插件", "zh-TW": "允許的外掛"}},
+      "tool_denied_plugins": {"type": "string", "title": "Prohibited plugins", "default": "", "maxLength": 4096, "i18n": {"default": "Prohibited plugins", "zh": "禁止的插件", "zh-TW": "禁止的外掛"}},
       "endpoint": {"type": "string", "title": "MCP endpoint", "default": "/plugins/mcp", "maxLength": 64, "readOnly": true, "i18n": {"default": "MCP endpoint", "zh": "MCP 端点", "zh-TW": "MCP 端點"}},
       "listen_mode": {"type": "string", "title": "Listen interface", "enum": ["all", "interface", "address"], "default": "all", "i18n": {"default": "Listen interface", "zh": "监听接口", "zh-TW": "監聽介面"}},
       "listen_interface": {"type": "string", "title": "Interface", "default": "", "maxLength": 15, "enabled_when": {"field": "listen_mode", "equals": "interface"}, "required_when": {"field": "listen_mode", "equals": "interface"}, "i18n": {"default": "Interface", "zh": "接口", "zh-TW": "介面"}},

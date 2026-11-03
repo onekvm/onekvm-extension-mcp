@@ -1,4 +1,5 @@
 #include "listen.hpp"
+#include "tools.hpp"
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -202,6 +203,24 @@ bool LoadConfig(bool allow_missing, Config &config, std::string &error) {
     }
     config.port = json_object_get_int(port);
   }
+  for (const auto &[key, destination] :
+       std::array<std::pair<const char *, std::string *>, 3>{{
+           {"tool_default_policy", &config.tool_default_policy},
+           {"tool_allowed_plugins", &config.tool_allowed_plugins},
+           {"tool_denied_plugins", &config.tool_denied_plugins}}}) {
+    json_object *value = nullptr;
+    if (json_object_object_get_ex(root.get(), key, &value)) {
+      if (!json_object_is_type(value, json_type_string)) {
+        error = std::string(key) + " must be a string";
+        return false;
+      }
+      destination->assign(json_object_get_string(value), json_object_get_string_len(value));
+    }
+  }
+  if (!onekvm_mcp::ValidToolPolicy(config)) {
+    error = "invalid MCP tool access policy";
+    return false;
+  }
   return onekvm_mcp::ConfigReady(config, error);
 }
 
@@ -304,7 +323,7 @@ int ConnectUnix(std::string_view path, int timeout_seconds, std::string &error) 
 bool ControlRequest(const Identity &identity, std::string_view method,
                     std::string_view path, std::string_view payload,
                     int timeout_seconds, std::string &response_body,
-                    std::string &error) {
+                    std::string &error, std::size_t max_response_bytes = 64U << 10) {
   const int fd = ConnectUnix(kControlSocket, timeout_seconds, error);
   if (fd < 0) {
     error = "connect OneKVM extension control API: " + error;
@@ -322,7 +341,7 @@ bool ControlRequest(const Identity &identity, std::string_view method,
   }
   std::array<char, 4096> response{};
   std::string received_data;
-  while (received_data.size() <= (64U << 10)) {
+  while (received_data.size() <= max_response_bytes) {
     const auto received = recv(fd, response.data(), response.size(), 0);
     if (received < 0 && errno == EINTR)
       continue;
@@ -337,7 +356,7 @@ bool ControlRequest(const Identity &identity, std::string_view method,
     received_data.append(response.data(), static_cast<std::size_t>(received));
   }
   close(fd);
-  if (received_data.empty() || received_data.size() > (64U << 10)) {
+  if (received_data.empty() || received_data.size() > max_response_bytes) {
     error = "invalid OneKVM extension control API response";
     return false;
   }
@@ -359,6 +378,22 @@ bool ControlRequest(const Identity &identity, std::string_view method,
   response_body.assign(line.substr(body + 4));
   return true;
 }
+
+Json ToolRegistry(const Identity &identity, std::string &error) {
+  std::string body;
+  if (!ControlRequest(identity, "GET", "/api/extensions/points/mcp.tool", "", 10,
+                      body, error, kMaxRequestBytes + (64U << 10)))
+    return {};
+  Json registry = ParseJSON(body, error);
+  if (!registry || !json_object_is_type(registry.get(), json_type_array)) {
+    error = "invalid MCP tool registry";
+    return {};
+  }
+  return registry;
+}
+
+json_object *CallContributedTool(const std::string &name, json_object *arguments,
+                                const Config &config, const Identity &identity);
 
 bool PostHID(const Identity &identity, std::string_view path,
              std::string_view payload, std::string &error) {
@@ -725,7 +760,38 @@ json_object *CallTool(const std::string &name, json_object *arguments,
                ? ToolResult("ATX action " + action + " completed")
                : ToolResult(error, true);
   }
-  return ToolResult("Unknown tool " + name, true);
+  return CallContributedTool(name, arguments, config, identity);
+}
+
+json_object *CallContributedTool(const std::string &name, json_object *arguments,
+                                const Config &config, const Identity &identity) {
+  std::string error;
+  Json registry = ToolRegistry(identity, error);
+  if (!registry)
+    return ToolResult("Tool registry unavailable: " + error, true);
+  for (std::size_t index = 0; index < json_object_array_length(registry.get()); ++index) {
+    onekvm_mcp::ContributedTool tool;
+    if (!onekvm_mcp::ReadContributedTool(json_object_array_get_idx(registry.get(), index), tool) ||
+        tool.name != name || !onekvm_mcp::AllowsPlugin(config, tool.source))
+      continue;
+    Json request(json_object_new_object());
+    json_object_object_add(request.get(), "id", json_object_new_string(tool.id.c_str()));
+    json_object_object_add(request.get(), "generation", json_object_new_uint64(tool.generation));
+    json_object_object_add(request.get(), "arguments", json_object_get(arguments));
+    const char *payload = json_object_to_json_string_ext(request.get(), JSON_C_TO_STRING_PLAIN);
+    std::string body;
+    if (!ControlRequest(identity, "POST", "/api/extensions/points/mcp.tool/invoke", payload,
+                        130, body, error, kMaxRequestBytes + (64U << 10)))
+      return ToolResult(error, true);
+    Json output = ParseJSON(body + "\n", error);
+    if (!output && body != "null")
+      return ToolResult("Invalid tool response", true);
+    json_object *result = ToolResult(body);
+    if (json_object_is_type(output.get(), json_type_object))
+      json_object_object_add(result, "structuredContent", output.release());
+    return result;
+  }
+  return ToolResult("Unknown or prohibited tool " + name, true);
 }
 
 json_object *Tool(const char *name, const char *description,
@@ -739,7 +805,10 @@ json_object *Tool(const char *name, const char *description,
   return tool;
 }
 
-json_object *ToolsList(const Identity &identity) {
+json_object *ToolsList(const Identity &identity, const Config &config, std::string &error) {
+  Json registry = ToolRegistry(identity, error);
+  if (!registry)
+    return nullptr;
   json_object *result = json_object_new_object();
   json_object *tools = json_object_new_array();
   json_object_array_add(tools, Tool("screen_capture", "Capture the current OneKVM screen as a JPEG image. The result reports the pixel dimensions used by mouse_move.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
@@ -753,6 +822,19 @@ json_object *ToolsList(const Identity &identity) {
   if (ReadATXStatus(identity, atx, ignored) && atx.available) {
     json_object_array_add(tools, Tool("atx_status", "Read the attached computer's ATX power and disk LED state.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
     json_object_array_add(tools, Tool("atx_action", "Operate the attached computer's ATX front-panel controls. power_short briefly presses the power button, power_long holds it to force power off, and reset presses the reset button.", R"({"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["power_short","power_long","reset"]}}})"));
+  }
+  for (std::size_t index = 0; index < json_object_array_length(registry.get()); ++index) {
+    onekvm_mcp::ContributedTool entry;
+    if (!onekvm_mcp::ReadContributedTool(json_object_array_get_idx(registry.get(), index), entry) ||
+        !onekvm_mcp::AllowsPlugin(config, entry.source))
+      continue;
+    json_object *tool = json_object_new_object();
+    json_object_object_add(tool, "name", json_object_new_string(entry.name.c_str()));
+    json_object_object_add(tool, "description", json_object_new_string(entry.description.c_str()));
+    json_object_object_add(tool, "inputSchema", json_object_get(entry.schema));
+    if (!entry.title.empty())
+      json_object_object_add(tool, "title", json_object_new_string(entry.title.c_str()));
+    json_object_array_add(tools, tool);
   }
   json_object_object_add(result, "tools", tools);
   return result;
@@ -828,8 +910,11 @@ json_object *HandleRPC(json_object *request, const Config &config,
   }
   if (method == "ping")
     return RPCResult(id, json_object_new_object());
-  if (method == "tools/list")
-    return RPCResult(id, ToolsList(identity));
+  if (method == "tools/list") {
+    std::string error;
+    json_object *tools = ToolsList(identity, config, error);
+    return tools ? RPCResult(id, tools) : RPCError(id, -32603, "Tool registry unavailable: " + error);
+  }
   if (method == "tools/call") {
     json_object *params = nullptr;
     json_object *arguments = nullptr;

@@ -35,6 +35,16 @@
       copied: 'Token copied.',
       copyFailed: 'Automatic copy failed. Select and copy the token manually.',
       randomFailed: 'The browser cannot provide secure random values.',
+      toolAccess: 'Plugin tools',
+      toolDefault: 'Default access',
+      allow: 'Allow',
+      deny: 'Prohibit',
+      followDefault: 'Follow default',
+      toolHint: 'Allowed plugins can expose their declared tools to anyone with the MCP access token. Save settings to apply changes.',
+      pluginsFailed: 'Plugins could not be loaded.',
+      pluginsEmpty: 'No other plugins are installed.',
+      pluginsLoading: 'Loading plugins…',
+      refresh: 'Refresh plugins',
     },
     zh: {
       title: 'MCP 连接',
@@ -67,6 +77,16 @@
       copied: '令牌已复制。',
       copyFailed: '无法自动复制，请手动选择并复制令牌。',
       randomFailed: '浏览器无法提供安全的随机数。',
+      toolAccess: '插件工具',
+      toolDefault: '默认接入',
+      allow: '允许',
+      deny: '禁止',
+      followDefault: '跟随默认',
+      toolHint: '允许接入的插件可向持有 MCP 访问令牌的人公开其声明的工具。修改后保存生效。',
+      pluginsFailed: '无法加载插件。',
+      pluginsEmpty: '尚未安装其他插件。',
+      pluginsLoading: '正在加载插件…',
+      refresh: '刷新插件',
     },
     'zh-TW': {
       title: 'MCP 連線',
@@ -99,6 +119,16 @@
       copied: '權杖已複製。',
       copyFailed: '無法自動複製，請手動選取並複製權杖。',
       randomFailed: '瀏覽器無法提供安全的隨機數。',
+      toolAccess: '外掛工具',
+      toolDefault: '預設接入',
+      allow: '允許',
+      deny: '禁止',
+      followDefault: '跟隨預設',
+      toolHint: '允許接入的外掛可向持有 MCP 存取權杖的人公開其宣告的工具。修改後儲存生效。',
+      pluginsFailed: '無法載入外掛。',
+      pluginsEmpty: '尚未安裝其他外掛。',
+      pluginsLoading: '正在載入外掛…',
+      refresh: '重新整理外掛',
     },
   }
   const t = runtime.i18n.createTranslator(messages)
@@ -189,11 +219,112 @@
     if (!copied) throw new Error(errorMessage)
   }
 
+  function useToolAccess(initial) {
+    const defaultPolicy = ref('allow')
+    const rules = ref(Object.create(null))
+    const saved = ref('')
+    const plugins = ref([])
+    const loading = ref(false)
+    const loadError = ref('')
+    const controller = new AbortController()
+    const validID = (id) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(id)
+    const signature = computed(() => JSON.stringify([defaultPolicy.value, Object.entries(rules.value).sort(([a], [b]) => a.localeCompare(b))]))
+    const rows = computed(() => {
+      const names = new Map(plugins.value.filter((item) => item?.installed && validID(item.id) && item.id !== 'mcp')
+        .map((item) => [item.id, item.name || item.id]))
+      Object.keys(rules.value).forEach((id) => { if (!names.has(id)) names.set(id, id) })
+      return [...names].sort(([a], [b]) => a.localeCompare(b)).map(([id, name]) => ({
+        id, name, rule: rules.value[id] || 'default',
+        allowed: (rules.value[id] || defaultPolicy.value) === 'allow',
+      }))
+    })
+    function collect() {
+      const ids = Object.keys(rules.value).sort()
+      return {
+        tool_default_policy: defaultPolicy.value,
+        tool_allowed_plugins: ids.filter((id) => rules.value[id] === 'allow').join(','),
+        tool_denied_plugins: ids.filter((id) => rules.value[id] === 'deny').join(','),
+      }
+    }
+    function reset(settings) {
+      defaultPolicy.value = settings?.tool_default_policy === 'deny' ? 'deny' : 'allow'
+      const next = Object.create(null)
+      for (const [key, value] of [['tool_allowed_plugins', 'allow'], ['tool_denied_plugins', 'deny']]) {
+        readText(settings, key).split(',').map((id) => id.trim()).filter((id) => validID(id) && id !== 'mcp')
+          .forEach((id) => { next[id] = value })
+      }
+      rules.value = next
+      saved.value = signature.value
+    }
+    function setRule(id, value) {
+      const next = Object.assign(Object.create(null), rules.value)
+      if (value === 'allow' || value === 'deny') next[id] = value
+      else delete next[id]
+      rules.value = next
+    }
+    async function load() {
+      if (loading.value) return
+      loading.value = true
+      loadError.value = ''
+      try {
+        const response = await fetch(apiURL('/api/extensions'), { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
+        if (!response.ok) throw new Error(t('pluginsFailed'))
+        const data = await response.json()
+        if (!Array.isArray(data)) throw new Error(t('pluginsFailed'))
+        plugins.value = data
+      } catch (reason) {
+        if (reason?.name !== 'AbortError') loadError.value = t('pluginsFailed')
+      } finally {
+        loading.value = false
+      }
+    }
+    reset(initial)
+    onBeforeUnmount(() => controller.abort())
+    return { defaultPolicy, rows, loading, loadError, load, collect, reset, setRule,
+      dirty: computed(() => signature.value !== saved.value),
+      valid: computed(() => Object.values(collect()).every((value) => value.length <= 4096)),
+    }
+  }
+
+  const ToolAccessPanel = defineComponent({
+    name: 'MCPToolAccessPanel',
+    props: { policy: String, rows: Array, loading: Boolean, error: String, disabled: Boolean },
+    emits: ['update:policy', 'rule', 'refresh'],
+    setup(props, { emit }) {
+      return () => h('article', { class: 'mcp-card mcp-access-card' }, [
+        h('div', { class: 'mcp-token-heading' }, [
+          h('strong', t('toolAccess')),
+          h(NButton, { secondary: true, loading: props.loading, disabled: props.disabled, onClick: () => emit('refresh') }, { default: () => t('refresh') }),
+        ]),
+        h('label', { class: 'mcp-field' }, [
+          h('span', t('toolDefault')),
+          h(NSelect, { value: props.policy, disabled: props.disabled,
+            options: [{ label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
+            'aria-label': t('toolDefault'), 'onUpdate:value': (value) => emit('update:policy', value),
+          }),
+        ]),
+        h('p', { class: 'mcp-hint' }, t('toolHint')),
+        props.error ? h(NAlert, { type: 'error', showIcon: false }, { default: () => props.error }) : null,
+        !props.rows.length ? h('p', { class: 'mcp-hint', role: 'status' }, props.loading ? t('pluginsLoading') : props.error ? '' : t('pluginsEmpty')) : null,
+        h('div', { class: 'mcp-access-list' }, props.rows.map((row) => h('div', { class: 'mcp-access-row', key: row.id, 'data-plugin': row.id }, [
+          h('div', { class: 'mcp-access-name' }, [h('strong', row.name), row.name !== row.id ? h('small', row.id) : null]),
+          h(NTag, { type: row.allowed ? 'success' : 'warning', bordered: false }, { default: () => row.allowed ? t('allow') : t('deny') }),
+          h(NSelect, { value: row.rule, disabled: props.disabled,
+            options: [{ label: t('followDefault'), value: 'default' }, { label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
+            'aria-label': `${row.name} · ${t('toolAccess')}`,
+            'onUpdate:value': (value) => emit('rule', row.id, value),
+          }),
+        ]))),
+      ])
+    },
+  })
+
   const Page = defineComponent({
     name: 'MCPPage',
     props: { host: { type: Object, required: true } },
     setup(props) {
       const initial = props.host.extension.value.settings || {}
+      const toolAccess = useToolAccess(initial)
       const initialTimeout = readTimeout(initial)
       const captureTimeout = ref(initialTimeout)
       const savedTimeout = ref(initialTimeout)
@@ -252,10 +383,10 @@
         if (listenMode.value === 'address') return validIP(listenAddress.value.trim())
         return listenMode.value === 'all'
       })
-      const dirty = computed(() => tokenTouched.value || captureTimeout.value !== savedTimeout.value ||
+      const dirty = computed(() => toolAccess.dirty.value || tokenTouched.value || captureTimeout.value !== savedTimeout.value ||
         listenMode.value !== savedMode.value || listenInterface.value !== savedInterface.value ||
         listenAddress.value !== savedAddress.value || listenPort.value !== savedPort.value)
-      const valid = computed(() => listenValid.value && Number.isInteger(captureTimeout.value) &&
+      const valid = computed(() => toolAccess.valid.value && listenValid.value && Number.isInteger(captureTimeout.value) &&
         captureTimeout.value >= 1 && captureTimeout.value <= 15 &&
         (!tokenTouched.value || (tokenDraft.value.length >= 16 && tokenDraft.value.length <= 128)))
       const unregister = props.host.registerSettings({
@@ -264,6 +395,7 @@
         showHostActions: false,
         collect: () => {
           const settings = {
+            ...toolAccess.collect(),
             capture_timeout_seconds: captureTimeout.value,
             listen_mode: listenMode.value,
             listen_interface: listenInterface.value,
@@ -274,6 +406,7 @@
           return settings
         },
         reset: (settings) => {
+          toolAccess.reset(settings)
           const timeout = readTimeout(settings)
           captureTimeout.value = timeout
           savedTimeout.value = timeout
@@ -291,6 +424,7 @@
         },
       })
       onBeforeUnmount(unregister)
+      onMounted(toolAccess.load)
       onMounted(async () => {
         try {
           const response = await fetch(apiURL('/api/network/interfaces'), { credentials: 'same-origin', cache: 'no-store' })
@@ -458,6 +592,12 @@
             h(NButton, { secondary: true, loading: saving.value, onClick: generate }, { default: () => configured.value ? t('regenerate') : t('generate') }),
           ]),
         ]),
+        h(ToolAccessPanel, {
+          policy: toolAccess.defaultPolicy.value, rows: toolAccess.rows.value, loading: toolAccess.loading.value,
+          error: toolAccess.loadError.value, disabled: saving.value,
+          'onUpdate:policy': (value) => { toolAccess.defaultPolicy.value = value },
+          onRule: toolAccess.setRule, onRefresh: toolAccess.load,
+        }),
         h('div', { class: 'mcp-save' }, [
           h(NButton, { type: 'primary', loading: saving.value, disabled: !dirty.value || !valid.value, onClick: save }, { default: () => t('save') }),
         ]),
@@ -483,6 +623,12 @@
       .mcp-save { display: flex; justify-content: flex-end; }
       .mcp-token-dialog { display: grid; gap: 12px; }
       .mcp-token-dialog p { margin: 0; }
+      .mcp-access-card { grid-template-columns: minmax(0, 1fr); }
+      .mcp-access-list { display: grid; gap: 12px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
+      .mcp-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(140px, 180px); gap: 12px; align-items: center; }
+      .mcp-access-name { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+      .mcp-access-name small { color: var(--n-text-color-3, #888); }
+      @media (max-width: 440px) { .mcp-access-row { grid-template-columns: minmax(0, 1fr) auto; } .mcp-access-row > .n-select { grid-column: 1 / -1; } }
       @media (max-width: 700px) { .mcp-card, .mcp-token-actions { grid-template-columns: 1fr; } .mcp-token-actions .n-button { width: 100%; } }
     `],
   })
