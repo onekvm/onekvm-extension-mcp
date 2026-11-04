@@ -30,24 +30,24 @@ onekvm-extension disable mcp
 
 ## Configure and connect
 
-Open the MCP extension page in OneKVM and configure:
-
-- **Listen interface:** choose `0.0.0.0`, one network interface, or an IP address. A network interface listens on that interface's address. An existing configuration keeps listening on `0.0.0.0`.
-- **Port:** choose a TCP port from 1024 to 65535. The default is 9710. An existing configuration uses this port.
-- **Access token:** enter a custom token of 16–128 characters, or generate a cryptographically secure 64-character token in the browser. A generated token is shown only once after it is saved, so copy it immediately and store it securely.
-- **Screen capture timeout:** choose how long the server waits for a video frame, from 1 to 15 seconds. The default is 5 seconds.
-
-Point your MCP client at the direct address shown on the page:
-
-```text
-http://<device-address>:<port>/
-```
-
-When the listen interface is `0.0.0.0`, use a reachable address of the device with the configured port. The direct address uses HTTP. You can also keep using the OneKVM web address:
+Open the MCP extension page, copy the **MCP address**, and configure an
+**Access token** of 16–128 characters. You can also generate a cryptographically
+secure 64-character token in the browser; copy it from the one-time dialog
+after it is saved. The MCP address uses the OneKVM web port:
 
 ```text
 https://<your-onekvm-host>/plugins/mcp
 ```
+
+Expand **Advanced connection settings** to configure direct TCP connections:
+
+- **Listen mode:** choose all interfaces (`0.0.0.0`), a network interface, or an IP address. Interface mode listens on that interface's address.
+- **Port:** choose 1024–65535, default 9710. This is the direct TCP port; the web MCP address keeps using the OneKVM web port.
+- **TCP connection address:** copy the resulting `http://<device-address>:<port>/` address if your client connects directly. All-interface mode shows a reachable device address. Direct connections use HTTP.
+- **Screen capture timeout:** choose how long to wait for a video frame, from 1 to 15 seconds, default 5.
+
+Existing listen and port settings are preserved. You do not need to change them
+to use the web MCP address.
 
 Every request must include the configured token. The web address checks only this token. A device login is not required.
 

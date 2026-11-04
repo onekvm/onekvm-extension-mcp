@@ -5,19 +5,17 @@
 
   const messages = {
     en: {
-      title: 'MCP connection',
-      description: 'Let authenticated AI agents capture the screen and operate the keyboard, mouse, and available ATX controls.',
-      endpoint: 'MCP endpoint',
-      listen: 'Listen interface',
-      listenHint: 'Choose 0.0.0.0, a network interface, or an IP address.',
+      endpoint: 'MCP address',
+      advanced: 'Advanced connection settings',
+      listen: 'Listen mode',
       listenAll: 'All interfaces (0.0.0.0)',
       listenInterface: 'Interface',
       listenAddress: 'IP address',
       interfacePlaceholder: 'Choose an interface',
       addressPlaceholder: 'Enter an IP address',
       port: 'Port',
-      direct: 'Direct address',
-      directHint: 'MCP clients connect to this address and port with the access token. This address uses HTTP.',
+      direct: 'TCP connection address',
+      directHint: 'Direct TCP connections use the listen address and port below over HTTP. The MCP address above uses the OneKVM web port.',
       interfacesFailed: 'Network interfaces did not load.',
       token: 'Access token',
       tokenHint: 'Enter 16–128 characters, or generate one in this browser.',
@@ -57,19 +55,17 @@
       toolListHint: 'Tool availability reflects saved settings.',
     },
     zh: {
-      title: 'MCP 连接',
-      description: '让经过鉴权的 AI Agent 截取屏幕，并操作键盘、鼠标和可用的 ATX 控制。',
-      endpoint: 'MCP 端点',
-      listen: '监听接口',
-      listenHint: '可以选择 0.0.0.0、一个网络接口，或填写 IP 地址。',
+      endpoint: 'MCP 地址',
+      advanced: '高级连接设置',
+      listen: '监听方式',
       listenAll: '所有接口（0.0.0.0）',
-      listenInterface: '选择接口',
+      listenInterface: '网络接口',
       listenAddress: 'IP 地址',
       interfacePlaceholder: '选择接口',
       addressPlaceholder: '输入 IP 地址',
       port: '端口',
-      direct: '直接地址',
-      directHint: 'MCP 客户端使用访问令牌连接这个地址和端口。这个地址使用 HTTP。',
+      direct: 'TCP 连接地址',
+      directHint: '独立 TCP 连接通过 HTTP 使用以下监听地址和端口；上方 MCP 地址使用 OneKVM 网页端口。',
       interfacesFailed: '网络接口没有加载出来。',
       token: '访问令牌',
       tokenHint: '输入 16–128 个字符，或在浏览器里生成一个。',
@@ -109,19 +105,17 @@
       toolListHint: '工具可用状态以已保存的设置为准。',
     },
     'zh-TW': {
-      title: 'MCP 連線',
-      description: '讓經過鑑權的 AI Agent 擷取螢幕，並操作鍵盤、滑鼠和可用的 ATX 控制。',
-      endpoint: 'MCP 端點',
-      listen: '監聽介面',
-      listenHint: '可以選擇 0.0.0.0、一個網路介面，或填寫 IP 位址。',
+      endpoint: 'MCP 位址',
+      advanced: '進階連線設定',
+      listen: '監聽方式',
       listenAll: '所有介面（0.0.0.0）',
-      listenInterface: '選擇介面',
+      listenInterface: '網路介面',
       listenAddress: 'IP 位址',
       interfacePlaceholder: '選擇介面',
       addressPlaceholder: '輸入 IP 位址',
       port: '連接埠',
-      direct: '直接位址',
-      directHint: 'MCP 用戶端使用存取權杖連線這個位址和連接埠。這個位址使用 HTTP。',
+      direct: 'TCP 連線位址',
+      directHint: '獨立 TCP 連線透過 HTTP 使用以下監聽位址和連接埠；上方 MCP 位址使用 OneKVM 網頁連接埠。',
       interfacesFailed: '網路介面沒有載入。',
       token: '存取權杖',
       tokenHint: '輸入 16–128 個字元，或在瀏覽器裡產生一個。',
@@ -351,6 +345,82 @@
     },
   })
 
+  function settingField(id, title, control, wide = false) {
+    return h('div', { class: ['mcp-field', wide && 'mcp-span'], role: 'group',
+      'aria-labelledby': `${id}-label`, 'data-field': id }, [
+      h('span', { id: `${id}-label` }, title), control,
+    ])
+  }
+
+  const ConnectionSettings = defineComponent({
+    name: 'MCPConnectionSettings',
+    props: { endpoint: String, direct: String, draft: Object, interfaces: Array,
+      configured: Boolean, saving: Boolean, interfaceError: String },
+    emits: ['change', 'generate'],
+    setup(props, { emit }) {
+      const change = (field, value) => emit('change', field, value)
+      const inputProps = (id) => ({ id, 'aria-labelledby': `${id}-label` })
+      return () => h('div', { class: 'mcp-connection' }, [
+        h('article', { class: 'mcp-card mcp-connection-card' }, [
+          settingField('mcp-endpoint', t('endpoint'), h(NInput, {
+            value: props.endpoint, readonly: true, inputProps: inputProps('mcp-endpoint'),
+          })),
+          h('div', { class: 'mcp-token-group', role: 'group', 'aria-labelledby': 'mcp-token-label' }, [
+            h('div', { class: 'mcp-token-heading' }, [
+              h('strong', { id: 'mcp-token-label' }, t('token')),
+              h(NTag, { type: props.configured ? 'success' : 'warning', bordered: false },
+                { default: () => props.configured ? t('configured') : t('notConfigured') }),
+            ]),
+            h('div', { class: 'mcp-token-actions' }, [
+              h(NInput, { value: props.draft.token, type: 'password', showPasswordOn: 'click',
+                maxlength: 128, autocomplete: 'new-password', placeholder: t('tokenPlaceholder'),
+                inputProps: { 'aria-labelledby': 'mcp-token-label' }, disabled: props.saving,
+                'onUpdate:value': (value) => change('token', value),
+              }),
+              h(NButton, { secondary: true, loading: props.saving, onClick: () => emit('generate') },
+                { default: () => props.configured ? t('regenerate') : t('generate') }),
+            ]),
+            h('p', { class: 'mcp-hint' }, t('tokenHint')),
+          ]),
+        ]),
+        h('details', { class: 'mcp-card mcp-advanced' }, [
+          h('summary', t('advanced')),
+          h('div', { class: 'mcp-advanced-grid' }, [
+            h('p', { class: 'mcp-hint mcp-span' }, t('directHint')),
+            settingField('mcp-listen-mode', t('listen'), h(NSelect, {
+              value: props.draft.mode, inputProps: inputProps('mcp-listen-mode'),
+              options: [{ label: t('listenAll'), value: 'all' }, { label: t('listenInterface'), value: 'interface' },
+                { label: t('listenAddress'), value: 'address' }], disabled: props.saving,
+              'onUpdate:value': (value) => change('mode', value),
+            })),
+            settingField('mcp-listen-port', t('port'), h(NInputNumber, {
+              value: props.draft.port, min: 1024, max: 65535, precision: 0, disabled: props.saving,
+              inputProps: inputProps('mcp-listen-port'), 'onUpdate:value': (value) => change('port', value),
+            })),
+            props.draft.mode === 'interface' ? settingField('mcp-listen-interface', t('listenInterface'), h(NSelect, {
+              value: props.draft.interface || null, options: props.interfaces, placeholder: t('interfacePlaceholder'),
+              filterable: true, disabled: props.saving, inputProps: inputProps('mcp-listen-interface'),
+              'onUpdate:value': (value) => change('interface', String(value || '')),
+            }), true) : null,
+            props.draft.mode === 'interface' && props.interfaceError
+              ? h(NAlert, { class: 'mcp-span', type: 'warning', showIcon: false }, { default: () => props.interfaceError }) : null,
+            props.draft.mode === 'address' ? settingField('mcp-listen-address', t('listenAddress'), h(NInput, {
+              value: props.draft.address, placeholder: t('addressPlaceholder'), maxlength: 64, disabled: props.saving,
+              inputProps: inputProps('mcp-listen-address'),
+              status: props.draft.address && !validIP(props.draft.address.trim()) ? 'error' : undefined,
+              'onUpdate:value': (value) => change('address', String(value || '')),
+            }), true) : null,
+            settingField('mcp-direct-address', t('direct'), h('output', { class: 'mcp-derived-address' }, props.direct), true),
+            settingField('mcp-capture-timeout', t('timeout'), h(NInputNumber, {
+              value: props.draft.timeout, min: 1, max: 15, precision: 0, disabled: props.saving,
+              inputProps: inputProps('mcp-capture-timeout'), 'onUpdate:value': (value) => change('timeout', value),
+            })),
+          ]),
+        ]),
+      ])
+    },
+  })
+
   const ToolAccessPanel = defineComponent({
     name: 'MCPToolAccessPanel',
     props: { policy: String, rows: Array, tools: Array, loading: Boolean, error: String, disabled: Boolean },
@@ -361,13 +431,11 @@
           h('strong', t('toolAccess')),
           h(NButton, { secondary: true, loading: props.loading, disabled: props.disabled, onClick: () => emit('refresh') }, { default: () => t('refresh') }),
         ]),
-        h('label', { class: 'mcp-field' }, [
-          h('span', t('toolDefault')),
-          h(NSelect, { value: props.policy, disabled: props.disabled,
-            options: [{ label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
-            'aria-label': t('toolDefault'), 'onUpdate:value': (value) => emit('update:policy', value),
-          }),
-        ]),
+        settingField('mcp-tool-default', t('toolDefault'), h(NSelect, { value: props.policy, disabled: props.disabled,
+          options: [{ label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
+          inputProps: { 'aria-labelledby': 'mcp-tool-default-label' },
+          'onUpdate:value': (value) => emit('update:policy', value),
+        })),
         h('p', { class: 'mcp-hint' }, t('toolHint')),
         props.error ? h(NAlert, { type: 'error', showIcon: false }, { default: () => props.error }) : null,
         !props.rows.length ? h('p', { class: 'mcp-hint', role: 'status' }, props.loading ? t('pluginsLoading') : props.error ? '' : t('pluginsEmpty')) : null,
@@ -565,101 +633,19 @@
       }
 
       return () => h('section', { class: 'mcp-page' }, [
-        h('h2', t('title')),
-        h('p', { class: 'mcp-description' }, t('description')),
         error.value ? h(NAlert, { type: 'error', showIcon: false }, { default: () => error.value }) : null,
-        interfaceError.value ? h(NAlert, { type: 'warning', showIcon: false }, { default: () => interfaceError.value }) : null,
-        h('article', { class: 'mcp-card' }, [
-          h('label', { class: 'mcp-field' }, [
-            h('span', t('listen')),
-            h(NSelect, {
-              value: listenMode.value,
-              options: [
-                { label: t('listenAll'), value: 'all' },
-                { label: t('listenInterface'), value: 'interface' },
-                { label: t('listenAddress'), value: 'address' },
-              ],
-              disabled: saving.value,
-              'onUpdate:value': (value) => { listenMode.value = value === 'interface' || value === 'address' ? value : 'all' },
-            }),
-            h('small', t('listenHint')),
-          ]),
-          h('label', { class: 'mcp-field' }, [
-            h('span', t('port')),
-            h(NInputNumber, {
-              value: listenPort.value,
-              min: 1024,
-              max: 65535,
-              precision: 0,
-              disabled: saving.value,
-              'onUpdate:value': (value) => { listenPort.value = value },
-            }),
-          ]),
-          listenMode.value === 'interface' ? h('label', { class: 'mcp-field mcp-span' }, [
-            h('span', t('listenInterface')),
-            h(NSelect, {
-              value: listenInterface.value || null,
-              options: interfaceOptions.value,
-              placeholder: t('interfacePlaceholder'),
-              filterable: true,
-              disabled: saving.value,
-              'onUpdate:value': (value) => { listenInterface.value = String(value || '') },
-            }),
-          ]) : null,
-          listenMode.value === 'address' ? h('label', { class: 'mcp-field mcp-span' }, [
-            h('span', t('listenAddress')),
-            h(NInput, {
-              value: listenAddress.value,
-              placeholder: t('addressPlaceholder'),
-              maxlength: 64,
-              disabled: saving.value,
-              status: listenAddress.value && !validIP(listenAddress.value.trim()) ? 'error' : undefined,
-              'onUpdate:value': (value) => { listenAddress.value = String(value || '') },
-            }),
-          ]) : null,
-          h('label', { class: 'mcp-field mcp-span' }, [
-            h('span', t('direct')),
-            h(NInput, { value: directEndpoint.value, readonly: true }),
-            h('small', t('directHint')),
-          ]),
-        ]),
-        h('article', { class: 'mcp-card' }, [
-          h('label', { class: 'mcp-field' }, [
-            h('span', t('endpoint')),
-            h(NInput, { value: endpoint.value, readonly: true }),
-          ]),
-          h('label', { class: 'mcp-field' }, [
-            h('span', t('timeout')),
-            h(NInputNumber, {
-              value: captureTimeout.value,
-              min: 1,
-              max: 15,
-              precision: 0,
-              disabled: saving.value,
-              'onUpdate:value': (value) => { captureTimeout.value = value },
-            }),
-          ]),
-        ]),
-        h('article', { class: 'mcp-card mcp-token-card' }, [
-          h('div', { class: 'mcp-token-heading' }, [
-            h('strong', t('token')),
-            h(NTag, { type: configured.value ? 'success' : 'warning', bordered: false }, { default: () => configured.value ? t('configured') : t('notConfigured') }),
-          ]),
-          h('p', { class: 'mcp-hint' }, t('tokenHint')),
-          h('div', { class: 'mcp-token-actions' }, [
-            h(NInput, {
-              value: tokenDraft.value,
-              type: 'password',
-              showPasswordOn: 'click',
-              maxlength: 128,
-              autocomplete: 'new-password',
-              placeholder: t('tokenPlaceholder'),
-              disabled: saving.value,
-              'onUpdate:value': setToken,
-            }),
-            h(NButton, { secondary: true, loading: saving.value, onClick: generate }, { default: () => configured.value ? t('regenerate') : t('generate') }),
-          ]),
-        ]),
+        h(ConnectionSettings, {
+          endpoint: endpoint.value, direct: directEndpoint.value, interfaces: interfaceOptions.value,
+          configured: configured.value, saving: saving.value, interfaceError: interfaceError.value,
+          draft: { mode: listenMode.value, port: listenPort.value, interface: listenInterface.value,
+            address: listenAddress.value, timeout: captureTimeout.value, token: tokenDraft.value },
+          onChange: (field, value) => {
+            if (field === 'token') setToken(value)
+            else ({ mode: listenMode, port: listenPort, interface: listenInterface,
+              address: listenAddress, timeout: captureTimeout })[field].value = value
+          },
+          onGenerate: generate,
+        }),
         h(ToolAccessPanel, {
           policy: toolAccess.defaultPolicy.value, rows: toolAccess.rows.value, tools: toolAccess.tools.value, loading: toolAccess.loading.value,
           error: toolAccess.loadError.value, disabled: saving.value,
@@ -678,11 +664,16 @@
     component: Page,
     styles: [`
       .mcp-page { display: grid; gap: 14px; }
-      .mcp-page h2 { margin: 0; font-size: 18px; }
-      .mcp-description, .mcp-hint, .mcp-field small { margin: 0; color: var(--n-text-color-3, #888); }
+      .mcp-hint, .mcp-field small { margin: 0; color: var(--n-text-color-3, #888); }
       .mcp-field small { font-size: 12px; line-height: 1.45; }
       .mcp-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr); gap: 14px; padding: 14px; border: 1px solid var(--n-border-color, #444); border-radius: 8px; background: transparent; }
-      .mcp-token-card { grid-template-columns: 1fr; }
+      .mcp-connection { display: grid; gap: 14px; min-width: 0; }
+      .mcp-connection-card { grid-template-columns: minmax(0, 1fr); }
+      .mcp-token-group { display: grid; gap: 10px; }
+      .mcp-advanced { display: block; }
+      .mcp-advanced summary { cursor: pointer; font-weight: 600; }
+      .mcp-advanced-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .45fr); gap: 14px; margin-top: 14px; }
+      .mcp-derived-address { font-family: monospace; overflow-wrap: anywhere; user-select: all; }
       .mcp-field { display: grid; gap: 7px; }
       .mcp-span { grid-column: 1 / -1; }
       .mcp-field > span { font-size: 13px; font-weight: 600; }
@@ -706,7 +697,7 @@
       .mcp-tool-table code, .mcp-tool-table strong { display: block; }
       .mcp-tool-table p { margin: 4px 0 0; color: var(--n-text-color-3, #888); line-height: 1.5; }
       @media (max-width: 440px) { .mcp-access-row { grid-template-columns: minmax(0, 1fr) auto; } .mcp-access-row > .n-select { grid-column: 1 / -1; } }
-      @media (max-width: 700px) { .mcp-card, .mcp-token-actions { grid-template-columns: 1fr; } .mcp-token-actions .n-button { width: 100%; } }
+      @media (max-width: 700px) { .mcp-card, .mcp-token-actions, .mcp-advanced-grid { grid-template-columns: 1fr; } .mcp-token-actions .n-button { width: 100%; } }
     `],
   })
 })()
