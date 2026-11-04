@@ -1,5 +1,6 @@
 #include "listen.hpp"
 #include "tools.hpp"
+#include "request_wait.hpp"
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -1248,7 +1249,7 @@ int Serve() {
   };
   bool failed = false;
   while (!stopped && !failed) {
-    const int ready = poll(listeners, 2, 1000);
+    const int ready = onekvm_mcp::WaitForRequest(listeners, 2, stopped);
     if (ready < 0) {
       if (errno == EINTR)
         continue;

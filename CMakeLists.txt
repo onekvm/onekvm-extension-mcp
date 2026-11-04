@@ -35,6 +35,10 @@ target_include_directories(onekvm-mcp-tools-test PRIVATE src ${JSON_C_INCLUDE_DI
 target_link_libraries(onekvm-mcp-tools-test PRIVATE ${JSON_C_STATIC_LIBRARY} m)
 
 enable_testing()
+add_executable(onekvm-mcp-request-wait-test tests/request_wait_test.cpp)
+target_compile_options(onekvm-mcp-request-wait-test PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(onekvm-mcp-request-wait-test PRIVATE src)
+add_test(NAME request-wait COMMAND onekvm-mcp-request-wait-test)
 add_test(NAME listen COMMAND onekvm-mcp-listen-test)
 add_test(NAME tools COMMAND onekvm-mcp-tools-test)
 
