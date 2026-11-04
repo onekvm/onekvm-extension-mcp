@@ -60,9 +60,17 @@ both lists. The same check applies to listing and direct calls, including a
 client's cached tool names. The built-in screenshot, HID and ATX tools retain
 their existing names and behavior. These rules govern contributed tools.
 
-The MCP settings page lists installed plugins and retained overrides, including
-disabled plugins, so access can be configured in advance. Save settings to
-apply changes; the existing settings lifecycle restarts the MCP service.
+The MCP settings page lists plugins with registered, valid tools and retained
+overrides. Plugins without tools do not acquire a tool-access row merely by being
+installed. An override is retained if its plugin is disabled or removed; its row
+then reports no registered tools. Save settings to apply changes.
+
+The tool table shows built-in and contributed tool names, descriptions, sources,
+and availability under the saved policy. ATX tools follow the same capability
+probe as MCP discovery. The authenticated `tools` extension method reads this
+inventory without requiring or revealing the MCP bearer token. Prohibited tools
+remain visible to administrators in this inventory, while MCP `tools/list` and
+direct calls continue to exclude them. Discovery failures are reported as errors.
 
 ## Acceptance fixture
 

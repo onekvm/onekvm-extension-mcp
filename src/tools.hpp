@@ -110,4 +110,32 @@ inline bool ReadContributedTool(json_object *entry, ContributedTool &tool) {
   return true;
 }
 
+inline void SetToolOrigin(json_object *tool, std::string_view source, bool allowed) {
+  json_object_object_add(tool, "source", json_object_new_string_len(source.data(), source.size()));
+  json_object_object_add(tool, "allowed", json_object_new_boolean(allowed));
+}
+
+// The management inventory includes prohibited tools so they can be inspected
+// and enabled. MCP discovery only returns tools the saved policy permits.
+inline void AppendContributedTools(json_object *tools, json_object *registry,
+                                   const Config &config, bool inventory) {
+  for (std::size_t index = 0; index < json_object_array_length(registry); ++index) {
+    ContributedTool entry;
+    if (!ReadContributedTool(json_object_array_get_idx(registry, index), entry))
+      continue;
+    const bool allowed = AllowsPlugin(config, entry.source);
+    if (!inventory && !allowed)
+      continue;
+    json_object *tool = json_object_new_object();
+    json_object_object_add(tool, "name", json_object_new_string(entry.name.c_str()));
+    json_object_object_add(tool, "description", json_object_new_string(entry.description.c_str()));
+    json_object_object_add(tool, "inputSchema", json_object_get(entry.schema));
+    if (!entry.title.empty())
+      json_object_object_add(tool, "title", json_object_new_string(entry.title.c_str()));
+    if (inventory)
+      SetToolOrigin(tool, entry.source, allowed);
+    json_object_array_add(tools, tool);
+  }
+}
+
 } // namespace onekvm_mcp

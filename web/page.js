@@ -41,10 +41,20 @@
       deny: 'Prohibit',
       followDefault: 'Follow default',
       toolHint: 'Allowed plugins can expose their declared tools to anyone with the MCP access token. Save settings to apply changes.',
-      pluginsFailed: 'Plugins could not be loaded.',
-      pluginsEmpty: 'No other plugins are installed.',
-      pluginsLoading: 'Loading plugins…',
-      refresh: 'Refresh plugins',
+      pluginsFailed: 'The tool list could not be loaded.',
+      pluginsEmpty: 'No other plugins have registered MCP tools.',
+      pluginsLoading: 'Loading tools…',
+      refresh: 'Refresh tools',
+      toolList: 'Tool list',
+      toolName: 'Tool',
+      toolSource: 'Source',
+      toolStatus: 'Status',
+      builtin: 'MCP built-in',
+      available: 'Available',
+      prohibited: 'Prohibited',
+      noTools: 'No registered tools',
+      toolCount: 'Tools',
+      toolListHint: 'Tool availability reflects saved settings.',
     },
     zh: {
       title: 'MCP 连接',
@@ -83,10 +93,20 @@
       deny: '禁止',
       followDefault: '跟随默认',
       toolHint: '允许接入的插件可向持有 MCP 访问令牌的人公开其声明的工具。修改后保存生效。',
-      pluginsFailed: '无法加载插件。',
-      pluginsEmpty: '尚未安装其他插件。',
-      pluginsLoading: '正在加载插件…',
-      refresh: '刷新插件',
+      pluginsFailed: '无法加载工具列表。',
+      pluginsEmpty: '当前没有其他插件注册 MCP 工具。',
+      pluginsLoading: '正在加载工具…',
+      refresh: '刷新工具',
+      toolList: '工具列表',
+      toolName: '工具',
+      toolSource: '来源',
+      toolStatus: '状态',
+      builtin: 'MCP 内置',
+      available: '可用',
+      prohibited: '已禁止',
+      noTools: '未注册工具',
+      toolCount: '工具数',
+      toolListHint: '工具可用状态以已保存的设置为准。',
     },
     'zh-TW': {
       title: 'MCP 連線',
@@ -125,10 +145,20 @@
       deny: '禁止',
       followDefault: '跟隨預設',
       toolHint: '允許接入的外掛可向持有 MCP 存取權杖的人公開其宣告的工具。修改後儲存生效。',
-      pluginsFailed: '無法載入外掛。',
-      pluginsEmpty: '尚未安裝其他外掛。',
-      pluginsLoading: '正在載入外掛…',
-      refresh: '重新整理外掛',
+      pluginsFailed: '無法載入工具清單。',
+      pluginsEmpty: '目前沒有其他外掛註冊 MCP 工具。',
+      pluginsLoading: '正在載入工具…',
+      refresh: '重新整理工具',
+      toolList: '工具清單',
+      toolName: '工具',
+      toolSource: '來源',
+      toolStatus: '狀態',
+      builtin: 'MCP 內建',
+      available: '可用',
+      prohibited: '已禁止',
+      noTools: '未註冊工具',
+      toolCount: '工具數',
+      toolListHint: '工具可用狀態以已儲存的設定為準。',
     },
   }
   const t = runtime.i18n.createTranslator(messages)
@@ -219,25 +249,31 @@
     if (!copied) throw new Error(errorMessage)
   }
 
-  function useToolAccess(initial) {
+  function useToolAccess(initial, invokeTools) {
     const defaultPolicy = ref('allow')
     const rules = ref(Object.create(null))
     const saved = ref('')
     const plugins = ref([])
+    const inventory = ref([])
     const loading = ref(false)
     const loadError = ref('')
     const controller = new AbortController()
     const validID = (id) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(id)
     const signature = computed(() => JSON.stringify([defaultPolicy.value, Object.entries(rules.value).sort(([a], [b]) => a.localeCompare(b))]))
     const rows = computed(() => {
-      const names = new Map(plugins.value.filter((item) => item?.installed && validID(item.id) && item.id !== 'mcp')
+      const installedNames = new Map(plugins.value.filter((item) => item?.installed && validID(item.id))
         .map((item) => [item.id, item.name || item.id]))
+      const counts = new Map()
+      inventory.value.filter((tool) => tool.source !== 'mcp').forEach((tool) => counts.set(tool.source, (counts.get(tool.source) || 0) + 1))
+      const names = new Map([...counts.keys()].map((id) => [id, installedNames.get(id) || id]))
       Object.keys(rules.value).forEach((id) => { if (!names.has(id)) names.set(id, id) })
       return [...names].sort(([a], [b]) => a.localeCompare(b)).map(([id, name]) => ({
-        id, name, rule: rules.value[id] || 'default',
-        allowed: (rules.value[id] || defaultPolicy.value) === 'allow',
+        id, name: installedNames.get(id) || name, rule: rules.value[id] || 'default', count: counts.get(id) || 0,
       }))
     })
+    const tools = computed(() => inventory.value.map((tool) => ({ ...tool,
+      sourceName: tool.source === 'mcp' ? t('builtin') : plugins.value.find((plugin) => plugin.id === tool.source)?.name || tool.source,
+    })))
     function collect() {
       const ids = Object.keys(rules.value).sort()
       return {
@@ -267,11 +303,19 @@
       loading.value = true
       loadError.value = ''
       try {
-        const response = await fetch(apiURL('/api/extensions'), { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
-        if (!response.ok) throw new Error(t('pluginsFailed'))
-        const data = await response.json()
-        if (!Array.isArray(data)) throw new Error(t('pluginsFailed'))
+        const [data, result] = await Promise.all([
+          fetch(apiURL('/api/extensions'), { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).then((response) => {
+            if (!response.ok) throw new Error(t('pluginsFailed'))
+            return response.json()
+          }),
+          invokeTools(),
+        ])
+        if (controller.signal.aborted) return
+        if (!Array.isArray(data) || !Array.isArray(result?.tools) || result.tools.some((tool) =>
+          !validID(tool?.source) || typeof tool.name !== 'string' || typeof tool.description !== 'string' || typeof tool.allowed !== 'boolean'))
+          throw new Error(t('pluginsFailed'))
         plugins.value = data
+        inventory.value = result.tools
       } catch (reason) {
         if (reason?.name !== 'AbortError') loadError.value = t('pluginsFailed')
       } finally {
@@ -280,15 +324,36 @@
     }
     reset(initial)
     onBeforeUnmount(() => controller.abort())
-    return { defaultPolicy, rows, loading, loadError, load, collect, reset, setRule,
+    return { defaultPolicy, rows, tools, loading, loadError, load, collect, reset, setRule,
       dirty: computed(() => signature.value !== saved.value),
       valid: computed(() => Object.values(collect()).every((value) => value.length <= 4096)),
     }
   }
 
+  const ToolList = defineComponent({
+    name: 'MCPToolList',
+    props: { tools: Array },
+    setup(props) {
+      return () => h('div', { class: 'mcp-tool-list' }, [
+        h('h3', { id: 'mcp-tool-list-title' }, t('toolList')),
+        h('p', { class: 'mcp-hint' }, t('toolListHint')),
+        h('div', { class: 'mcp-tool-scroll', tabindex: 0, role: 'region', 'aria-labelledby': 'mcp-tool-list-title' }, [
+          h('table', { class: 'mcp-tool-table', 'aria-labelledby': 'mcp-tool-list-title' }, [
+            h('thead', [h('tr', ['toolName', 'toolSource', 'toolStatus'].map((key) => h('th', { scope: 'col' }, t(key))))]),
+            h('tbody', props.tools.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
+              h('td', [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
+              h('td', tool.sourceName),
+              h('td', [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
+            ]))),
+          ]),
+        ]),
+      ])
+    },
+  })
+
   const ToolAccessPanel = defineComponent({
     name: 'MCPToolAccessPanel',
-    props: { policy: String, rows: Array, loading: Boolean, error: String, disabled: Boolean },
+    props: { policy: String, rows: Array, tools: Array, loading: Boolean, error: String, disabled: Boolean },
     emits: ['update:policy', 'rule', 'refresh'],
     setup(props, { emit }) {
       return () => h('article', { class: 'mcp-card mcp-access-card' }, [
@@ -306,15 +371,16 @@
         h('p', { class: 'mcp-hint' }, t('toolHint')),
         props.error ? h(NAlert, { type: 'error', showIcon: false }, { default: () => props.error }) : null,
         !props.rows.length ? h('p', { class: 'mcp-hint', role: 'status' }, props.loading ? t('pluginsLoading') : props.error ? '' : t('pluginsEmpty')) : null,
-        h('div', { class: 'mcp-access-list' }, props.rows.map((row) => h('div', { class: 'mcp-access-row', key: row.id, 'data-plugin': row.id }, [
+        !props.error ? h('div', { class: 'mcp-access-list' }, props.rows.map((row) => h('div', { class: 'mcp-access-row', key: row.id, 'data-plugin': row.id }, [
           h('div', { class: 'mcp-access-name' }, [h('strong', row.name), row.name !== row.id ? h('small', row.id) : null]),
-          h(NTag, { type: row.allowed ? 'success' : 'warning', bordered: false }, { default: () => row.allowed ? t('allow') : t('deny') }),
+          h(NTag, { bordered: false }, { default: () => row.count ? `${t('toolCount')}: ${row.count}` : t('noTools') }),
           h(NSelect, { value: row.rule, disabled: props.disabled,
             options: [{ label: t('followDefault'), value: 'default' }, { label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
             'aria-label': `${row.name} · ${t('toolAccess')}`,
             'onUpdate:value': (value) => emit('rule', row.id, value),
           }),
-        ]))),
+        ]))) : null,
+        !props.error && props.tools.length ? h(ToolList, { tools: props.tools }) : null,
       ])
     },
   })
@@ -324,7 +390,7 @@
     props: { host: { type: Object, required: true } },
     setup(props) {
       const initial = props.host.extension.value.settings || {}
-      const toolAccess = useToolAccess(initial)
+      const toolAccess = useToolAccess(initial, () => props.host.invoke('tools', {}))
       const initialTimeout = readTimeout(initial)
       const captureTimeout = ref(initialTimeout)
       const savedTimeout = ref(initialTimeout)
@@ -474,7 +540,9 @@
         saving.value = true
         error.value = ''
         try {
-          return await props.host.saveSettings()
+          const saved = await props.host.saveSettings()
+          if (saved) await toolAccess.load()
+          return saved
         } catch (reason) {
           error.value = reason instanceof Error ? reason.message : String(reason)
           return false
@@ -593,7 +661,7 @@
           ]),
         ]),
         h(ToolAccessPanel, {
-          policy: toolAccess.defaultPolicy.value, rows: toolAccess.rows.value, loading: toolAccess.loading.value,
+          policy: toolAccess.defaultPolicy.value, rows: toolAccess.rows.value, tools: toolAccess.tools.value, loading: toolAccess.loading.value,
           error: toolAccess.loadError.value, disabled: saving.value,
           'onUpdate:policy': (value) => { toolAccess.defaultPolicy.value = value },
           onRule: toolAccess.setRule, onRefresh: toolAccess.load,
@@ -628,6 +696,15 @@
       .mcp-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(140px, 180px); gap: 12px; align-items: center; }
       .mcp-access-name { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
       .mcp-access-name small { color: var(--n-text-color-3, #888); }
+      .mcp-tool-list { display: grid; gap: 12px; min-width: 0; }
+      .mcp-tool-list h3 { margin: 0; font-size: 15px; }
+      .mcp-tool-scroll { min-width: 0; overflow-x: auto; }
+      .mcp-tool-table { width: 100%; min-width: 560px; border-collapse: collapse; text-align: left; font-size: 13px; }
+      .mcp-tool-table th, .mcp-tool-table td { padding: 12px 8px; border-bottom: 1px solid var(--n-border-color, #444); vertical-align: top; }
+      .mcp-tool-table th { font-weight: 600; }
+      .mcp-tool-table td:first-child { width: 65%; overflow-wrap: anywhere; }
+      .mcp-tool-table code, .mcp-tool-table strong { display: block; }
+      .mcp-tool-table p { margin: 4px 0 0; color: var(--n-text-color-3, #888); line-height: 1.5; }
       @media (max-width: 440px) { .mcp-access-row { grid-template-columns: minmax(0, 1fr) auto; } .mcp-access-row > .n-select { grid-column: 1 / -1; } }
       @media (max-width: 700px) { .mcp-card, .mcp-token-actions { grid-template-columns: 1fr; } .mcp-token-actions .n-button { width: 100%; } }
     `],

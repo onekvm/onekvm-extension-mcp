@@ -81,8 +81,13 @@ Call `screen_capture` before `mouse_move`. Coordinates start at `0,0` in the top
 The MCP settings page controls which plugins can expose their declared tools.
 Access defaults to allowed and can be changed to prohibited. Each plugin can
 follow the default, be explicitly allowed, or be explicitly prohibited. Save
-settings to apply changes. Prohibited tools are hidden and direct calls using
+settings to apply changes. Prohibited tools are hidden from MCP clients and direct calls using
 cached names are rejected. Built-in capture, HID and ATX tools remain available.
+The access list shows plugins with registered tools and plugins with saved
+overrides; a retained override without tools is labeled accordingly. The tool
+table shows built-in and plugin tool names, descriptions, sources and availability
+under the saved settings. Use Refresh tools to update it. Prohibited tools remain
+visible here for management and are excluded from MCP client discovery and calls.
 Clients that cache tool lists can refresh the list or reconnect to update their display.
 
 Plugins declare tools through `mcp.tool`, with names `<plugin-id>__<tool-id>`.

@@ -31,6 +31,33 @@ int main() {
     ContributedTool tool;
     Require(ReadContributedTool(entry, tool), "valid declared contribution");
     Require(tool.name == "example__status" && tool.generation == 9, "stable namespaced name");
+    json_object *registry = json_object_new_array();
+    json_object_array_add(registry, json_object_get(entry));
+    config.tool_default_policy = "allow";
+    config.tool_allowed_plugins.clear();
+    config.tool_denied_plugins = "example";
+    json_object *visible = json_object_new_array();
+    AppendContributedTools(visible, registry, config, false);
+    Require(json_object_array_length(visible) == 0, "prohibited tools stay out of MCP discovery");
+    json_object_put(visible);
+    json_object *inventory = json_object_new_array();
+    AppendContributedTools(inventory, registry, config, true);
+    Require(json_object_array_length(inventory) == 1, "management can inspect prohibited tools");
+    json_object *listed = json_object_array_get_idx(inventory, 0);
+    json_object *allowed = nullptr;
+    Require(StringField(listed, "source") == "example" &&
+                json_object_object_get_ex(listed, "allowed", &allowed) &&
+                !json_object_get_boolean(allowed), "inventory reports actual origin and saved policy");
+    Require(StringField(listed, "name") == "example__status", "inventory uses the MCP name");
+    json_object_put(inventory);
+    config.tool_denied_plugins.clear();
+    visible = json_object_new_array();
+    AppendContributedTools(visible, registry, config, false);
+    listed = json_object_array_get_idx(visible, 0);
+    Require(json_object_array_length(visible) == 1 &&
+                !json_object_object_get_ex(listed, "allowed", &allowed) &&
+                StringField(listed, "source").empty(), "public discovery keeps its existing contract");
+    json_object_put(visible);
     json_object_object_add(entry, "source", json_object_new_string("other"));
     Require(!ReadContributedTool(entry, tool), "another plugin cannot claim a tool's identity");
     json_object_object_add(entry, "source", json_object_new_string("example"));
@@ -39,6 +66,11 @@ int main() {
     json_object_object_add(entry, "version", json_object_new_int(1));
     json_object_object_add(entry, "method", json_object_new_string("../exec"));
     Require(!ReadContributedTool(entry, tool), "invalid methods never become tools");
+    inventory = json_object_new_array();
+    AppendContributedTools(inventory, registry, config, true);
+    Require(json_object_array_length(inventory) == 0, "invalid declarations cannot appear in inventory");
+    json_object_put(inventory);
+    json_object_put(registry);
     json_object_put(entry);
     std::cout << "MCP tool access and contribution checks passed\n";
     return 0;

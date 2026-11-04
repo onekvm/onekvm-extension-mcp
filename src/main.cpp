@@ -805,7 +805,8 @@ json_object *Tool(const char *name, const char *description,
   return tool;
 }
 
-json_object *ToolsList(const Identity &identity, const Config &config, std::string &error) {
+json_object *ToolsList(const Identity &identity, const Config &config, std::string &error,
+                       bool inventory = false) {
   Json registry = ToolRegistry(identity, error);
   if (!registry)
     return nullptr;
@@ -823,19 +824,10 @@ json_object *ToolsList(const Identity &identity, const Config &config, std::stri
     json_object_array_add(tools, Tool("atx_status", "Read the attached computer's ATX power and disk LED state.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
     json_object_array_add(tools, Tool("atx_action", "Operate the attached computer's ATX front-panel controls. power_short briefly presses the power button, power_long holds it to force power off, and reset presses the reset button.", R"({"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["power_short","power_long","reset"]}}})"));
   }
-  for (std::size_t index = 0; index < json_object_array_length(registry.get()); ++index) {
-    onekvm_mcp::ContributedTool entry;
-    if (!onekvm_mcp::ReadContributedTool(json_object_array_get_idx(registry.get(), index), entry) ||
-        !onekvm_mcp::AllowsPlugin(config, entry.source))
-      continue;
-    json_object *tool = json_object_new_object();
-    json_object_object_add(tool, "name", json_object_new_string(entry.name.c_str()));
-    json_object_object_add(tool, "description", json_object_new_string(entry.description.c_str()));
-    json_object_object_add(tool, "inputSchema", json_object_get(entry.schema));
-    if (!entry.title.empty())
-      json_object_object_add(tool, "title", json_object_new_string(entry.title.c_str()));
-    json_object_array_add(tools, tool);
-  }
+  if (inventory)
+    for (std::size_t index = 0; index < json_object_array_length(tools); ++index)
+      onekvm_mcp::SetToolOrigin(json_object_array_get_idx(tools, index), kExtensionID, true);
+  onekvm_mcp::AppendContributedTools(tools, registry.get(), config, inventory);
   json_object_object_add(result, "tools", tools);
   return result;
 }
@@ -1296,10 +1288,20 @@ int main(int argc, char **argv) {
     Config config;
     if (LoadConfig(true, config, error))
       return 0;
+  } else if (argc == 2 && std::string_view(argv[1]) == "--tools") {
+    Config config;
+    Identity identity;
+    if (LoadConfig(false, config, error) && LoadIdentity(identity, error)) {
+      Json inventory(ToolsList(identity, config, error, true));
+      if (inventory) {
+        std::cout << json_object_to_json_string_ext(inventory.get(), JSON_C_TO_STRING_PLAIN) << '\n';
+        return 0;
+      }
+    }
   } else if (argc == 1) {
     return Serve();
   } else {
-    error = "usage: onekvm-mcp [--controller|--health]";
+    error = "usage: onekvm-mcp [--controller|--health|--tools]";
   }
   std::cerr << "onekvm-mcp: " << error << '\n';
   return 1;
