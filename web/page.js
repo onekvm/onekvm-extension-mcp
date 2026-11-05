@@ -1,6 +1,6 @@
 (() => {
   const runtime = window.OneKVMPluginUI.v1
-  const { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } = runtime.vue
+  const { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef } = runtime.vue
   const { NAlert, NButton, NInput, NInputNumber, NSelect, NTag, useDialog, useMessage } = runtime.naive
 
   const messages = {
@@ -53,6 +53,10 @@
       noTools: 'No registered tools',
       toolCount: 'Tools',
       toolListHint: 'Tool availability reflects saved settings.',
+      filterTools: 'Filter tools',
+      toolFilterPlaceholder: 'Name, description or source',
+      toolFilterResults: 'Showing {shown} of {total} tools',
+      toolsNoMatch: 'No matching tools.',
     },
     zh: {
       endpoint: 'MCP 地址',
@@ -103,6 +107,10 @@
       noTools: '未注册工具',
       toolCount: '工具数',
       toolListHint: '工具可用状态以已保存的设置为准。',
+      filterTools: '筛选工具',
+      toolFilterPlaceholder: '名称、说明或来源',
+      toolFilterResults: '显示 {shown} / {total} 项工具',
+      toolsNoMatch: '没有匹配的工具。',
     },
     'zh-TW': {
       endpoint: 'MCP 位址',
@@ -153,6 +161,10 @@
       noTools: '未註冊工具',
       toolCount: '工具數',
       toolListHint: '工具可用狀態以已儲存的設定為準。',
+      filterTools: '篩選工具',
+      toolFilterPlaceholder: '名稱、說明或來源',
+      toolFilterResults: '顯示 {shown} / {total} 個工具',
+      toolsNoMatch: '沒有符合條件的工具。',
     },
   }
   const t = runtime.i18n.createTranslator(messages)
@@ -408,17 +420,33 @@
     name: 'MCPToolList',
     props: { tools: Array },
     setup(props) {
+      const query = shallowRef('')
+      const filtered = computed(() => {
+        const terms = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+        if (!terms.length) return props.tools
+        return props.tools.filter((tool) => {
+          const text = [tool.name, tool.title, tool.description, tool.source, tool.sourceName].join('\n').toLowerCase()
+          return terms.every((term) => text.includes(term))
+        })
+      })
       return () => h('div', { class: 'mcp-tool-list' }, [
         h('h3', { id: 'mcp-tool-list-title' }, t('toolList')),
         h('p', { class: 'mcp-hint' }, t('toolListHint')),
+        settingField('mcp-tool-filter', t('filterTools'), h(NInput, {
+          value: query.value, clearable: true, placeholder: t('toolFilterPlaceholder'),
+          inputProps: { id: 'mcp-tool-filter', 'aria-labelledby': 'mcp-tool-filter-label', 'aria-describedby': 'mcp-tool-filter-results' },
+          'onUpdate:value': (value) => { query.value = value || '' },
+        })),
+        h('p', { id: 'mcp-tool-filter-results', class: 'mcp-hint', role: 'status', 'aria-atomic': 'true' },
+          t('toolFilterResults').replace('{shown}', filtered.value.length).replace('{total}', props.tools.length)),
         h('div', { class: 'mcp-tool-scroll', tabindex: 0, role: 'region', 'aria-labelledby': 'mcp-tool-list-title' }, [
           h('table', { class: 'mcp-tool-table', 'aria-labelledby': 'mcp-tool-list-title' }, [
             h('thead', [h('tr', ['toolName', 'toolSource', 'toolStatus'].map((key) => h('th', { scope: 'col' }, t(key))))]),
-            h('tbody', props.tools.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
+            h('tbody', filtered.value.length ? filtered.value.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
               h('td', [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
               h('td', tool.sourceName),
               h('td', [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
-            ]))),
+            ])) : [h('tr', [h('td', { colspan: 3 }, t('toolsNoMatch'))])]),
           ]),
         ]),
       ])

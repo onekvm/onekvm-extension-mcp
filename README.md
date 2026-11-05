@@ -86,7 +86,10 @@ cached names are rejected. Built-in capture, HID and ATX tools remain available.
 The access list shows plugins with registered tools and plugins with saved
 overrides; a retained override without tools is labeled accordingly. The tool
 table shows built-in and plugin tool names, descriptions, sources and availability
-under the saved settings. Revisiting the settings page in the same tab reuses
+under the saved settings.
+The filter matches tool names, descriptions and sources without regard to case;
+clear it to show all tools.
+Revisiting the settings page in the same tab reuses
 the list for one minute, then refreshes it automatically on entry. Saving settings
 or changing plugins invalidates it; Refresh tools always fetches the latest list.
 Prohibited tools remain
