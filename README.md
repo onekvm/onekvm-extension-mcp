@@ -87,8 +87,10 @@ The access list shows plugins with registered tools and plugins with saved
 overrides; a retained override without tools is labeled accordingly. The tool
 table shows built-in and plugin tool names, descriptions, sources and availability
 under the saved settings.
-The filter matches tool names, descriptions and sources without regard to case;
-clear it to show all tools.
+Search matches tool names, descriptions and sources without regard to case.
+Combine it with the All, Available or Prohibited status filter.
+Results are paginated with 10, 20 or 50 tools per page. Changing search or status
+returns to the first page.
 Revisiting the settings page in the same tab reuses
 the list for one minute, then refreshes it automatically on entry. Saving settings
 or changing plugins invalidates it; Refresh tools always fetches the latest list.
