@@ -35,7 +35,7 @@ const runtime = {
 runtime.naive.useDialog = () => ({})
 runtime.naive.useMessage = () => ({})
 runInNewContext(readFileSync(new URL('../web/page.js', import.meta.url), 'utf8'), {
-  window: { OneKVMPluginUI: { v1: runtime }, location: { origin: 'https://device' } },
+  window: { OneKVMPluginUI: { v1: runtime }, location: { origin: 'https://device' }, addEventListener() {} },
   document: { querySelector: () => null }, URL, AbortController,
   fetch: async url => ({ ok: true, json: async () => url.endsWith('/api/extensions') ? plugins : [] }),
 })

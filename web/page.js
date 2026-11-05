@@ -298,7 +298,19 @@
     if (!copied) throw new Error(errorMessage)
   }
 
-  function useToolAccess(initial, invokeTools) {
+  // The host evaluates this bundle again on each visit. Keep one bounded,
+  // document-local snapshot across those evaluations, without storing settings.
+  const toolCacheID = Symbol.for('onekvm.mcp.settings.tools.v1')
+  const toolCache = window[toolCacheID] ||= { entry: null, listening: false }
+  const toolCacheTTL = 60_000
+  if (!toolCache.listening) {
+    for (const event of ['onekvm:extensions-changed', 'onekvm:unauthorized', 'onekvm:permissions-changed']) {
+      window.addEventListener(event, () => { toolCache.entry = null })
+    }
+    toolCache.listening = true
+  }
+
+  function useToolAccess(initial, invokeTools, version) {
     const defaultPolicy = ref('allow')
     const rules = ref(Object.create(null))
     const saved = ref('')
@@ -309,6 +321,11 @@
     const controller = new AbortController()
     const validID = (id) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(id)
     const signature = computed(() => JSON.stringify([defaultPolicy.value, Object.entries(rules.value).sort(([a], [b]) => a.localeCompare(b))]))
+    const cacheKey = () => JSON.stringify([apiURL('/api/extensions'), version, saved.value])
+    function applySnapshot(snapshot) {
+      plugins.value = snapshot.plugins
+      inventory.value = snapshot.tools
+    }
     const rows = computed(() => {
       const installedNames = new Map(plugins.value.filter((item) => item?.installed && validID(item.id))
         .map((item) => [item.id, pluginName(item)]))
@@ -347,8 +364,11 @@
       else delete next[id]
       rules.value = next
     }
-    async function load() {
+    async function load(refresh = true) {
       if (loading.value) return
+      const key = cacheKey()
+      if (!refresh && toolCache.entry?.key === key && Date.now() < toolCache.entry.expires) return
+      toolCache.entry = null
       loading.value = true
       loadError.value = ''
       try {
@@ -363,8 +383,12 @@
         if (!Array.isArray(data) || !Array.isArray(result?.tools) || result.tools.some((tool) =>
           !validID(tool?.source) || typeof tool.name !== 'string' || typeof tool.description !== 'string' || typeof tool.allowed !== 'boolean'))
           throw new Error(t('pluginsFailed'))
-        plugins.value = data
-        inventory.value = result.tools
+        const snapshot = {
+          key, expires: Date.now() + toolCacheTTL, tools: result.tools,
+          plugins: data.map(({ id, installed, name, i18n }) => ({ id, installed, name, i18n })),
+        }
+        applySnapshot(snapshot)
+        toolCache.entry = snapshot
       } catch (reason) {
         if (reason?.name !== 'AbortError') loadError.value = t('pluginsFailed')
       } finally {
@@ -372,6 +396,7 @@
       }
     }
     reset(initial)
+    if (toolCache.entry?.key === cacheKey()) applySnapshot(toolCache.entry)
     onBeforeUnmount(() => controller.abort())
     return { defaultPolicy, rows, tools, loading, loadError, load, collect, reset, setRule,
       dirty: computed(() => signature.value !== saved.value),
@@ -513,7 +538,7 @@
     props: { host: { type: Object, required: true } },
     setup(props) {
       const initial = props.host.extension.value.settings || {}
-      const toolAccess = useToolAccess(initial, () => props.host.invoke('tools', {}))
+      const toolAccess = useToolAccess(initial, () => props.host.invoke('tools', {}), props.host.extension.value.version)
       const initialTimeout = readTimeout(initial)
       const captureTimeout = ref(initialTimeout)
       const savedTimeout = ref(initialTimeout)
@@ -613,7 +638,7 @@
         },
       })
       onBeforeUnmount(unregister)
-      onMounted(toolAccess.load)
+      onMounted(() => toolAccess.load(false))
       onMounted(async () => {
         try {
           const response = await fetch(apiURL('/api/network/interfaces'), { credentials: 'same-origin', cache: 'no-store' })

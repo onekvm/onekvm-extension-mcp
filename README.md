@@ -86,7 +86,10 @@ cached names are rejected. Built-in capture, HID and ATX tools remain available.
 The access list shows plugins with registered tools and plugins with saved
 overrides; a retained override without tools is labeled accordingly. The tool
 table shows built-in and plugin tool names, descriptions, sources and availability
-under the saved settings. Use Refresh tools to update it. Prohibited tools remain
+under the saved settings. Revisiting the settings page in the same tab reuses
+the list for one minute, then refreshes it automatically on entry. Saving settings
+or changing plugins invalidates it; Refresh tools always fetches the latest list.
+Prohibited tools remain
 visible here for management and are excluded from MCP client discovery and calls.
 Clients that cache tool lists can refresh the list or reconnect to update their display.
 

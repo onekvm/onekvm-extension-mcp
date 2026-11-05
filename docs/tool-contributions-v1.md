@@ -98,6 +98,12 @@ probe as MCP discovery. The authenticated `tools` extension method reads this
 inventory without requiring or revealing the MCP bearer token. Prohibited tools
 remain visible to administrators in this inventory, while MCP `tools/list` and
 direct calls continue to exclude them. Discovery failures are reported as errors.
+The settings page reuses one in-memory inventory snapshot for up to one minute
+across navigation. Refresh tools and successful settings saves fetch it again;
+plugin-change and access-change events clear it. Snapshots are keyed by the
+device API URL, MCP version and saved access policy, contain only tool metadata
+and plugin display names, and are discarded on a full page reload. This display
+cache does not change MCP discovery or invocation authorization.
 
 ## Acceptance fixture
 
