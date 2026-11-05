@@ -34,6 +34,33 @@ bytes; optional `title` is limited to 256. `inputSchema` must be an object schem
 The host limits each complete contribution to 16 KiB. MCP ignores incompatible
 versions and invalid declarations. A plugin cannot claim another plugin's name.
 
+### Localized display text
+
+The settings tool table follows the current UI language. Contributors can add
+`data.i18n` with `default` (English), `zh` and `zh-TW` catalogs containing
+`title` and `description`. For example:
+
+```json
+"i18n": {
+  "default": {"title": "Service status", "description": "Read the service status."},
+  "zh": {"title": "服务状态", "description": "读取服务状态。"},
+  "zh-TW": {"title": "服務狀態", "description": "讀取服務狀態。"}
+}
+```
+
+Keep the canonical English `data.title` and `data.description`; `default` must
+match them. Each translated field has the same UTF-8 byte limit as its canonical
+field. The management inventory forwards valid display fields for `default`,
+`en`, `zh` and `zh-TW`; malformed, empty or oversized fields are omitted. UI
+locale matching and fallback use the shared extension translator. Missing
+fields fall back to the canonical English text, including older tools without
+translations. Switching language does not require a tool-list reload. Built-in
+tools also have English, Simplified Chinese and Traditional Chinese display text.
+
+MCP `tools/list` keeps the canonical English description and input schema, and
+does not include this display metadata. Tool names, argument names and access
+policy are independent of the UI language.
+
 MCP forwards the arguments object unchanged through the host's declared method
 interface. The handler must validate its arguments against its schema. Command
 methods also receive the host's ordinary declared-argument validation. Return

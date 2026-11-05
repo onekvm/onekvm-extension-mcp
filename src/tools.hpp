@@ -71,6 +71,7 @@ struct ContributedTool {
   std::string title;
   std::uint64_t generation = 0;
   json_object *schema = nullptr; // Borrowed from the registry response.
+  json_object *i18n = nullptr; // Optional display text, borrowed from the registry.
 };
 
 inline bool ReadContributedTool(json_object *entry, ContributedTool &tool) {
@@ -107,7 +108,36 @@ inline bool ReadContributedTool(json_object *entry, ContributedTool &tool) {
     return false;
   tool.generation = json_object_get_uint64(generation);
   tool.name = tool.source + "__" + local;
+  tool.i18n = nullptr;
+  json_object_object_get_ex(data, "i18n", &tool.i18n);
   return true;
+}
+
+inline void SetToolTranslations(json_object *tool, json_object *translations) {
+  if (!json_object_is_type(translations, json_type_object))
+    return;
+  json_object *catalog = json_object_new_object();
+  for (const char *locale : {"default", "en", "zh", "zh-TW"}) {
+    json_object *entry = nullptr;
+    if (!json_object_object_get_ex(translations, locale, &entry) ||
+        !json_object_is_type(entry, json_type_object))
+      continue;
+    json_object *text = json_object_new_object();
+    for (const char *field : {"title", "description"}) {
+      const std::string value = StringField(entry, field);
+      const std::size_t limit = std::string_view(field) == "title" ? 256 : 2048;
+      if (!value.empty() && value.size() <= limit)
+        json_object_object_add(text, field, json_object_new_string_len(value.data(), value.size()));
+    }
+    if (json_object_object_length(text))
+      json_object_object_add(catalog, locale, text);
+    else
+      json_object_put(text);
+  }
+  if (json_object_object_length(catalog))
+    json_object_object_add(tool, "i18n", catalog);
+  else
+    json_object_put(catalog);
 }
 
 inline void SetToolOrigin(json_object *tool, std::string_view source, bool allowed) {
@@ -132,8 +162,10 @@ inline void AppendContributedTools(json_object *tools, json_object *registry,
     json_object_object_add(tool, "inputSchema", json_object_get(entry.schema));
     if (!entry.title.empty())
       json_object_object_add(tool, "title", json_object_new_string(entry.title.c_str()));
-    if (inventory)
+    if (inventory) {
       SetToolOrigin(tool, entry.source, allowed);
+      SetToolTranslations(tool, entry.i18n);
+    }
     json_object_array_add(tools, tool);
   }
 }

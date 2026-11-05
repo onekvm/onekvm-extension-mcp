@@ -157,6 +157,61 @@
   }
   const t = runtime.i18n.createTranslator(messages)
 
+  const builtinToolMessages = {
+    screen_capture: {
+      default: { title: 'Capture screen' },
+      zh: { title: '屏幕截图', description: '将当前 OneKVM 画面截为 JPEG 图像，并返回 mouse_move 使用的像素尺寸。' },
+      'zh-TW': { title: '螢幕擷取', description: '將目前 OneKVM 畫面擷取為 JPEG 圖像，並傳回 mouse_move 使用的像素尺寸。' },
+    },
+    keyboard_key: {
+      default: { title: 'Send key' },
+      zh: { title: '发送按键', description: '发送一个 USB HID 键盘键码，修饰键使用 USB HID 位图。' },
+      'zh-TW': { title: '傳送按鍵', description: '傳送一個 USB HID 鍵盤鍵碼，修飾鍵使用 USB HID 點陣圖。' },
+    },
+    keyboard_type: {
+      default: { title: 'Type text' },
+      zh: { title: '输入文本', description: '通过 USB HID 键盘报告输入 US-ASCII 文本。' },
+      'zh-TW': { title: '輸入文字', description: '透過 USB HID 鍵盤報告輸入 US-ASCII 文字。' },
+    },
+    mouse_move: {
+      default: { title: 'Move mouse' },
+      zh: { title: '移动鼠标', description: '将绝对鼠标指针移至最近一次 screen_capture 图像中的像素位置。请先调用 screen_capture；x 从左侧的 0 开始，y 从顶部的 0 开始。' },
+      'zh-TW': { title: '移動滑鼠', description: '將絕對滑鼠指標移至最近一次 screen_capture 圖像中的像素位置。請先呼叫 screen_capture；x 從左側的 0 開始，y 從頂部的 0 開始。' },
+    },
+    mouse_click: {
+      default: { title: 'Click mouse' },
+      zh: { title: '点击鼠标', description: '单击或双击一次鼠标按钮。' },
+      'zh-TW': { title: '點擊滑鼠', description: '單擊或雙擊一次滑鼠按鈕。' },
+    },
+    mouse_scroll: {
+      default: { title: 'Scroll mouse' },
+      zh: { title: '滚动鼠标', description: '发送相对鼠标滚轮报告。' },
+      'zh-TW': { title: '捲動滑鼠', description: '傳送相對滑鼠滾輪報告。' },
+    },
+    atx_status: {
+      default: { title: 'Read ATX status' },
+      zh: { title: '读取 ATX 状态', description: '读取被控电脑的 ATX 电源和硬盘指示灯状态。' },
+      'zh-TW': { title: '讀取 ATX 狀態', description: '讀取被控電腦的 ATX 電源和硬碟指示燈狀態。' },
+    },
+    atx_action: {
+      default: { title: 'Operate ATX controls' },
+      zh: { title: '操作 ATX 控制', description: '操作被控电脑的 ATX 前面板：power_short 短按电源键，power_long 长按电源键以强制关机，reset 按下复位键。' },
+      'zh-TW': { title: '操作 ATX 控制', description: '操作被控電腦的 ATX 前面板：power_short 短按電源鍵，power_long 長按電源鍵以強制關機，reset 按下重設鍵。' },
+    },
+  }
+
+  function localizedTool(tool) {
+    const catalog = tool.source === 'mcp' ? builtinToolMessages[tool.name] : tool.i18n
+    const fallback = { title: tool.title || catalog?.default?.title || '', description: tool.description }
+    const translate = runtime.i18n.createTranslator({ ...catalog, default: fallback, en: fallback })
+    return { ...tool, title: fallback.title ? translate('title') : '', description: translate('description') }
+  }
+
+  function pluginName(plugin) {
+    if (!plugin) return ''
+    return runtime.i18n.createTranslator({ ...plugin.i18n, default: { name: plugin.name || plugin.id } })('name')
+  }
+
   function readTimeout(settings) {
     const value = Number(settings?.capture_timeout_seconds)
     return Number.isInteger(value) && value >= 1 && value <= 15 ? value : 5
@@ -256,7 +311,7 @@
     const signature = computed(() => JSON.stringify([defaultPolicy.value, Object.entries(rules.value).sort(([a], [b]) => a.localeCompare(b))]))
     const rows = computed(() => {
       const installedNames = new Map(plugins.value.filter((item) => item?.installed && validID(item.id))
-        .map((item) => [item.id, item.name || item.id]))
+        .map((item) => [item.id, pluginName(item)]))
       const counts = new Map()
       inventory.value.filter((tool) => tool.source !== 'mcp').forEach((tool) => counts.set(tool.source, (counts.get(tool.source) || 0) + 1))
       const names = new Map([...counts.keys()].map((id) => [id, installedNames.get(id) || id]))
@@ -265,8 +320,8 @@
         id, name: installedNames.get(id) || name, rule: rules.value[id] || 'default', count: counts.get(id) || 0,
       }))
     })
-    const tools = computed(() => inventory.value.map((tool) => ({ ...tool,
-      sourceName: tool.source === 'mcp' ? t('builtin') : plugins.value.find((plugin) => plugin.id === tool.source)?.name || tool.source,
+    const tools = computed(() => inventory.value.map((tool) => ({ ...localizedTool(tool),
+      sourceName: tool.source === 'mcp' ? t('builtin') : pluginName(plugins.value.find((plugin) => plugin.id === tool.source)) || tool.source,
     })))
     function collect() {
       const ids = Object.keys(rules.value).sort()

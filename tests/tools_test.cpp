@@ -58,6 +58,32 @@ int main() {
                 !json_object_object_get_ex(listed, "allowed", &allowed) &&
                 StringField(listed, "source").empty(), "public discovery keeps its existing contract");
     json_object_put(visible);
+    json_object *data = nullptr;
+    json_object_object_get_ex(entry, "data", &data);
+    json_object *translations = json_tokener_parse(R"({"default":{"description":"Read status"},"zh":{"title":"狀態","description":"读取状态","command":"ignored"},"zh-TW":{"title":false},"unsupported":{"description":"ignored"}})");
+    json_object *traditional = nullptr;
+    json_object_object_get_ex(translations, "zh-TW", &traditional);
+    json_object_object_add(traditional, "description", json_object_new_string(std::string(2049, 'x').c_str()));
+    json_object_object_add(data, "i18n", translations);
+    inventory = json_object_new_array();
+    AppendContributedTools(inventory, registry, config, true);
+    listed = json_object_array_get_idx(inventory, 0);
+    json_object *catalog = nullptr;
+    Require(json_object_object_get_ex(listed, "i18n", &catalog), "management inventory includes translations");
+    json_object *chinese = nullptr;
+    Require(json_object_object_get_ex(catalog, "zh", &chinese) && StringField(chinese, "description") == "读取状态", "translated text survives discovery");
+    json_object *unused = nullptr;
+    Require(!json_object_object_get_ex(chinese, "command", &unused) &&
+                !json_object_object_get_ex(catalog, "zh-TW", &unused) &&
+                !json_object_object_get_ex(catalog, "unsupported", &unused), "invalid and unsupported translation fields are omitted");
+    Require(StringField(listed, "description") == "Read status" && StringField(listed, "name") == "example__status", "translations preserve canonical text and identity");
+    json_object_put(inventory);
+    visible = json_object_new_array();
+    AppendContributedTools(visible, registry, config, false);
+    listed = json_object_array_get_idx(visible, 0);
+    Require(StringField(listed, "description") == "Read status" &&
+                !json_object_object_get_ex(listed, "i18n", &unused), "MCP clients retain canonical descriptions without display metadata");
+    json_object_put(visible);
     json_object_object_add(entry, "source", json_object_new_string("other"));
     Require(!ReadContributedTool(entry, tool), "another plugin cannot claim a tool's identity");
     json_object_object_add(entry, "source", json_object_new_string("example"));
