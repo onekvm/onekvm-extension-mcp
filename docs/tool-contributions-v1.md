@@ -67,6 +67,12 @@ methods also receive the host's ordinary declared-argument validation. Return
 one JSON value: MCP presents it as text, and object results also appear as
 `structuredContent`. Handler failures return `isError: true`.
 
+An image-producing contributor may instead return a complete MCP tool result:
+an object with a `content` array and an object-valued `structuredContent` field.
+The MCP host forwards that content array unchanged, so image blocks can use the
+standard `type: "image"`, base64 `data`, and `mimeType` fields. Older object
+results without both fields keep the text plus structured-content behavior above.
+
 Every list and call resolves the active registry again. Disabled, removed and
 pending-upgrade contributors are excluded; calls carry the observed lifecycle
 generation and the bridge rejects stale entries. Discovery failure is an error,

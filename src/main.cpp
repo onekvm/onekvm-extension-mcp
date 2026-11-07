@@ -1012,6 +1012,21 @@ json_object *CallContributedTool(const std::string &name, json_object *arguments
     Json output = ParseJSON(body + "\n", error);
     if (!output && body != "null")
       return ToolResult("Invalid tool response", true);
+    if (json_object_is_type(output.get(), json_type_object)) {
+      json_object *content = nullptr;
+      json_object *structured = nullptr;
+      if (json_object_object_get_ex(output.get(), "content", &content) &&
+          json_object_is_type(content, json_type_array) &&
+          json_object_object_get_ex(output.get(), "structuredContent", &structured) &&
+          json_object_is_type(structured, json_type_object)) {
+        // Image-producing contributors may return a complete MCP tool result.
+        // Legacy object results retain the text plus structured-content path.
+        json_object *result = json_object_new_object();
+        json_object_object_add(result, "content", json_object_get(content));
+        json_object_object_add(result, "structuredContent", json_object_get(structured));
+        return result;
+      }
+    }
     json_object *result = ToolResult(body);
     if (json_object_is_type(output.get(), json_type_object))
       json_object_object_add(result, "structuredContent", output.release());
