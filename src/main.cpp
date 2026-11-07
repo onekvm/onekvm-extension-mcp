@@ -67,12 +67,19 @@ struct JPEGFrame {
   std::vector<std::uint8_t> payload;
 };
 
+constexpr int kScreenCacheSeconds = 30;
+
 struct ScreenGeometry {
   std::uint16_t width = 0;
   std::uint16_t height = 0;
   std::vector<std::uint8_t> rgb;
+  std::chrono::steady_clock::time_point cached_at{};
 
   bool valid() const { return width != 0 && height != 0; }
+  bool cached() const {
+    return !rgb.empty() && std::chrono::steady_clock::now() - cached_at <=
+                               std::chrono::seconds(kScreenCacheSeconds);
+  }
 };
 
 struct ATXStatus {
@@ -691,6 +698,38 @@ bool ASCIIKey(char character, std::uint8_t &usage, std::uint8_t &modifiers) {
   return false;
 }
 
+json_object *ImageResult(const std::string &text, const std::vector<std::uint8_t> &jpeg) {
+  json_object *result = json_object_new_object();
+  json_object *content = json_object_new_array();
+  json_object_array_add(content, TextContent(text));
+  if (!jpeg.empty()) {
+    json_object *image = json_object_new_object();
+    json_object_object_add(image, "type", json_object_new_string("image"));
+    const std::string encoded = Base64(jpeg);
+    json_object_object_add(image, "data", json_object_new_string(encoded.c_str()));
+    json_object_object_add(image, "mimeType", json_object_new_string("image/jpeg"));
+    json_object_array_add(content, image);
+  }
+  json_object_object_add(result, "content", content);
+  return result;
+}
+
+bool RememberFrame(ScreenGeometry &screen, const JPEGFrame &frame, std::string &error) {
+  std::vector<std::uint8_t> rgb;
+  int width = 0;
+  int height = 0;
+  if (!DecodeJPEG(frame.payload, rgb, width, height) || width != frame.width ||
+      height != frame.height) {
+    error = "could not read the captured image";
+    return false;
+  }
+  screen.width = frame.width;
+  screen.height = frame.height;
+  screen.rgb = std::move(rgb);
+  screen.cached_at = std::chrono::steady_clock::now();
+  return true;
+}
+
 json_object *CallTool(const std::string &name, json_object *arguments,
                       const Config &config, const Identity &identity,
                       ScreenGeometry &screen) {
@@ -701,62 +740,73 @@ json_object *CallTool(const std::string &name, json_object *arguments,
       return ToolResult(error, true);
     if (frame.width == 0 || frame.height == 0)
       return ToolResult("captured frame has invalid dimensions", true);
-    screen.width = frame.width;
-    screen.height = frame.height;
+    if (!RememberFrame(screen, frame, error))
+      return ToolResult(error, true);
+    return ImageResult(
+        "Screen size: " + std::to_string(frame.width) + "x" + std::to_string(frame.height) +
+            " pixels. Full image. This frame is kept for " +
+            std::to_string(kScreenCacheSeconds) +
+            " seconds. mouse_click_at and mouse_move x/y use this image's pixel coordinates.",
+        frame.payload);
+  }
+  if (name == "screen_changes") {
+    JPEGFrame frame;
+    if (!CaptureJPEG(identity, config.capture_timeout_seconds, frame, error))
+      return ToolResult(error, true);
+    if (frame.width == 0 || frame.height == 0)
+      return ToolResult("captured frame has invalid dimensions", true);
+    if (!screen.cached() || screen.rgb.size() != static_cast<std::size_t>(frame.width) *
+                                                      frame.height * 3 ||
+        screen.width != frame.width || screen.height != frame.height) {
+      return ImageResult(
+          "No stored frame, or the stored frame expired after " +
+              std::to_string(kScreenCacheSeconds) +
+              " seconds. Call screen_capture. No image returned.",
+          {});
+    }
     std::vector<std::uint8_t> rgb;
     int decoded_width = 0;
     int decoded_height = 0;
-    const bool decoded = DecodeJPEG(frame.payload, rgb, decoded_width, decoded_height) &&
-                         decoded_width == frame.width && decoded_height == frame.height;
-    const std::uint8_t *previous =
-        decoded && screen.rgb.size() == rgb.size() ? screen.rgb.data() : nullptr;
-    const Change change =
-        decoded ? CompareFrames(previous, rgb.data(), frame.width, frame.height)
-                : Change{};
-    if (decoded)
-      screen.rgb = std::move(rgb);
-
-    std::string text;
-    std::vector<std::uint8_t> image_jpeg = frame.payload;
-    if (!decoded || change.kind == ChangeKind::Full) {
-      text = "Screen size: " + std::to_string(frame.width) + "x" +
-             std::to_string(frame.height) +
-             " pixels. Full image. mouse_click_at and mouse_move x/y use this image's pixel coordinates.";
-    } else if (change.kind == ChangeKind::Unchanged) {
-      text = "Screen unchanged, " + std::to_string(frame.width) + "x" +
-             std::to_string(frame.height) +
-             ". No new image. Reuse the previous image and its coordinates.";
-      image_jpeg.clear();
-    } else if (!EncodeJPEG(screen.rgb.data() +
-                               (static_cast<std::size_t>(change.y) * frame.width + change.x) * 3,
-                           change.width, change.height, frame.width * 3, image_jpeg)) {
-      text = "Screen size: " + std::to_string(frame.width) + "x" +
-             std::to_string(frame.height) +
-             " pixels. Full image. mouse_click_at and mouse_move x/y use this image's pixel coordinates.";
-      image_jpeg = frame.payload;
-    } else {
-      text = "Changed region at origin " + std::to_string(change.x) + "," +
-             std::to_string(change.y) + " size " + std::to_string(change.width) + "x" +
-             std::to_string(change.height) + " inside a " + std::to_string(frame.width) +
-             "x" + std::to_string(frame.height) +
-             " screen. This image is only that region. Add " + std::to_string(change.x) +
-             " to the horizontal coordinate and " + std::to_string(change.y) +
-             " to the vertical coordinate before mouse_click_at or mouse_move.";
+    if (!DecodeJPEG(frame.payload, rgb, decoded_width, decoded_height) ||
+        decoded_width != frame.width || decoded_height != frame.height)
+      return ToolResult("could not read the captured image", true);
+    const Change change = CompareFrames(screen.rgb.data(), rgb.data(), frame.width, frame.height);
+    screen.width = frame.width;
+    screen.height = frame.height;
+    screen.rgb = std::move(rgb);
+    screen.cached_at = std::chrono::steady_clock::now();
+    if (change.kind == ChangeKind::Unchanged) {
+      return ImageResult("Screen unchanged, " + std::to_string(frame.width) + "x" +
+                             std::to_string(frame.height) +
+                             ". No new image. The stored frame was refreshed for " +
+                             std::to_string(kScreenCacheSeconds) +
+                             " seconds. Reuse the previous image and its coordinates.",
+                         {});
     }
-
-    json_object *result = json_object_new_object();
-    json_object *content = json_object_new_array();
-    json_object_array_add(content, TextContent(text));
-    if (!image_jpeg.empty()) {
-      json_object *image = json_object_new_object();
-      json_object_object_add(image, "type", json_object_new_string("image"));
-      const std::string encoded = Base64(image_jpeg);
-      json_object_object_add(image, "data", json_object_new_string(encoded.c_str()));
-      json_object_object_add(image, "mimeType", json_object_new_string("image/jpeg"));
-      json_object_array_add(content, image);
-    }
-    json_object_object_add(result, "content", content);
-    return result;
+    if (change.kind == ChangeKind::Full)
+      return ImageResult(
+          "Screen size: " + std::to_string(frame.width) + "x" + std::to_string(frame.height) +
+              " pixels. The change covers most of the screen, so this is the full image. "
+              "mouse_click_at and mouse_move x/y use this image's pixel coordinates.",
+          frame.payload);
+    std::vector<std::uint8_t> crop;
+    if (!EncodeJPEG(screen.rgb.data() +
+                        (static_cast<std::size_t>(change.y) * frame.width + change.x) * 3,
+                    change.width, change.height, frame.width * 3, crop))
+      return ImageResult(
+          "Screen size: " + std::to_string(frame.width) + "x" + std::to_string(frame.height) +
+              " pixels. Full image. mouse_click_at and mouse_move x/y use this image's pixel coordinates.",
+          frame.payload);
+    return ImageResult(
+        "Changed region at origin " + std::to_string(change.x) + "," + std::to_string(change.y) +
+            " size " + std::to_string(change.width) + "x" + std::to_string(change.height) +
+            " inside a " + std::to_string(frame.width) + "x" + std::to_string(frame.height) +
+            " screen. This image is only that region. Add " + std::to_string(change.x) +
+            " to the horizontal coordinate and " + std::to_string(change.y) +
+            " to the vertical coordinate before mouse_click_at or mouse_move. The stored frame "
+            "was refreshed for " +
+            std::to_string(kScreenCacheSeconds) + " seconds.",
+        crop);
   }
   if (name == "keyboard_key") {
     int usage = 0;
@@ -988,7 +1038,8 @@ json_object *ToolsList(const Identity &identity, const Config &config, std::stri
     return nullptr;
   json_object *result = json_object_new_object();
   json_object *tools = json_object_new_array();
-  json_object_array_add(tools, Tool("screen_capture", "Capture the current OneKVM screen. The first call returns the full JPEG. Later calls return only the changed region, or no image when the screen is unchanged. A changed region includes its origin in the full screen; add that origin before mouse_click_at or mouse_move.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
+  json_object_array_add(tools, Tool("screen_capture", "Capture the full current OneKVM screen as a JPEG. The frame is stored for 30 seconds. mouse_click_at and mouse_move x/y use this image's pixel coordinates. Call screen_changes to fetch only what changed.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
+  json_object_array_add(tools, Tool("screen_changes", "Fetch only the screen region that changed since the stored frame. The stored frame lasts 30 seconds and is refreshed by screen_capture or screen_changes. Returns no image when the screen is unchanged. If the stored frame is missing or expired, call screen_capture. A changed region includes its origin in the full screen; add that origin before mouse_click_at or mouse_move.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
   json_object_array_add(tools, Tool("keyboard_key", "Send one USB HID keyboard usage. Modifiers use the USB HID modifier bitmap.", R"({"type":"object","additionalProperties":false,"required":["usage"],"properties":{"usage":{"type":"integer","minimum":0,"maximum":255},"modifiers":{"type":"integer","minimum":0,"maximum":255,"default":0},"action":{"type":"string","enum":["press","down","up"],"default":"press"}}})"));
   json_object_array_add(tools, Tool("keyboard_type", "Type US-ASCII text using USB HID keyboard reports.", R"({"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string","maxLength":1024},"interval_ms":{"type":"integer","minimum":0,"maximum":1000,"default":10}}})"));
   json_object_array_add(tools, Tool("mouse_move", "Move the absolute mouse pointer to a pixel in the most recent screen_capture image. Call screen_capture first. x is zero at the left edge and y is zero at the top edge.", R"({"type":"object","additionalProperties":false,"required":["x","y"],"properties":{"x":{"type":"integer","minimum":0,"maximum":65534,"description":"Horizontal pixel coordinate in the most recent screen_capture image."},"y":{"type":"integer","minimum":0,"maximum":65534,"description":"Vertical pixel coordinate in the most recent screen_capture image."}}})"));

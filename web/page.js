@@ -181,8 +181,13 @@
   const builtinToolMessages = {
     screen_capture: {
       default: { title: 'Capture screen' },
-      zh: { title: '屏幕截图', description: '截取当前画面。第一次返回整屏，之后只返回有变化的区域；画面没变则不返回图片。变化区域要加上它在整屏中的起点，再传给移动或点击。' },
-      'zh-TW': { title: '螢幕擷取', description: '擷取目前畫面。第一次傳回整屏，之後只傳回有變化的區域；畫面沒變則不傳回圖片。變化區域要加上它在整屏中的起點，再傳給移動或點擊。' },
+      zh: { title: '屏幕截图', description: '截取整屏 JPEG，并把这一帧保存 30 秒。' },
+      'zh-TW': { title: '螢幕擷取', description: '擷取整屏 JPEG，並把這一幀保存 30 秒。' },
+    },
+    screen_changes: {
+      default: { title: 'Fetch screen changes' },
+      zh: { title: '获取画面变化', description: '返回相对已保存画面有变化的区域。没变化则不返回图片。已保存的画面 30 秒后失效，失效后要重新截取整屏。变化区域要加上它在整屏中的起点。' },
+      'zh-TW': { title: '取得畫面變化', description: '傳回相對已保存畫面有變化的區域。沒變化則不傳回圖片。已保存的畫面 30 秒後失效，失效後要重新擷取整屏。變化區域要加上它在整屏中的起點。' },
     },
     keyboard_key: {
       default: { title: 'Send key' },

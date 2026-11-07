@@ -63,7 +63,8 @@ Treat the token as a password and use HTTPS whenever OneKVM is accessed over an 
 
 | Tool | Description |
 | --- | --- |
-| `screen_capture` | Returns the current screen as JPEG. After the first call, returns only the changed region, or no image when the screen is unchanged. |
+| `screen_capture` | Returns the full screen as JPEG and stores that frame for 30 seconds. |
+| `screen_changes` | Returns only the region that changed since the stored frame, or no image when nothing changed. The stored frame expires after 30 seconds. |
 | `keyboard_key` | Sends one USB HID keyboard usage with optional modifiers and `press`, `down`, or `up` behavior. |
 | `keyboard_type` | Types up to 1,024 bytes of US-ASCII text with an optional 0–1,000 ms interval between characters. |
 | `mouse_move` | Moves the absolute pointer to an `x`, `y` pixel coordinate from the most recent capture. |
@@ -73,7 +74,7 @@ Treat the token as a password and use HTTPS whenever OneKVM is accessed over an 
 | `atx_status` | Reports available power and disk LED state. Advertised only when the device exposes ATX control. |
 | `atx_action` | Performs `power_short`, `power_long`, or `reset`. Advertised only when the device exposes ATX control. |
 
-Call `screen_capture` before `mouse_move` or `mouse_click_at`. Coordinates start at `0,0` in the top-left corner and must remain inside the dimensions reported by the latest capture.
+Call `screen_capture` before `mouse_move` or `mouse_click_at`. Coordinates start at `0,0` in the top-left corner and must remain inside the dimensions reported by the latest full capture. A `screen_changes` image is only the changed region: add its origin to `x` and `y`. The stored frame lasts 30 seconds.
 
 `keyboard_type` uses a US keyboard layout and accepts US-ASCII only. For keys or shortcuts that it cannot represent directly, use `keyboard_key` with USB HID usage IDs and modifier bits.
 

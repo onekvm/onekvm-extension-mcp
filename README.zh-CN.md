@@ -71,7 +71,8 @@ Authorization: Bearer <访问令牌>
 
 | 工具 | 说明 |
 | --- | --- |
-| `screen_capture` | 返回当前画面的 JPEG。第一次是整屏，之后只返回有变化的区域；画面没变则不返回图片。 |
+| `screen_capture` | 返回整屏 JPEG，并把这一帧保存 30 秒。 |
+| `screen_changes` | 返回相对已保存画面有变化的区域；没变化则不返回图片。已保存的画面 30 秒后失效。 |
 | `keyboard_key` | 发送一个 USB HID 键盘用法，可带修饰键和 `press`、`down` 或 `up` 行为。 |
 | `keyboard_type` | 输入最多 1,024 字节的 US-ASCII 文本，字符间隔可设为 0–1,000 ms。 |
 | `mouse_move` | 按最近一次截图中的 `x`、`y` 像素坐标移动绝对指针。 |
@@ -82,7 +83,8 @@ Authorization: Bearer <访问令牌>
 | `atx_action` | 执行 `power_short`、`power_long` 或 `reset`；仅在设备提供 ATX 控制时发布。 |
 
 使用 `mouse_move` 或 `mouse_click_at` 前应先调用 `screen_capture`。坐标从左上角 `0,0` 开始，
-并且必须位于最近一次截图返回的尺寸范围内。
+并且必须位于最近一次整屏截图返回的尺寸范围内。`screen_changes` 的图片只是变化区域，
+要把返回的起点加到 `x`、`y` 上。已保存的画面保留 30 秒。
 
 `keyboard_type` 使用美式键盘布局，只接受 US-ASCII。它无法直接表达的按键
 或快捷键，请改用 `keyboard_key`，传入 USB HID usage ID 和修饰键位图。
