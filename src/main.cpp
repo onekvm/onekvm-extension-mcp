@@ -1,3 +1,4 @@
+#include "frame_diff.hpp"
 #include "listen.hpp"
 #include "tools.hpp"
 #include "request_wait.hpp"
@@ -14,11 +15,15 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <jpeglib.h>
+
 #include <array>
 #include <cctype>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <csetjmp>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -65,6 +70,7 @@ struct JPEGFrame {
 struct ScreenGeometry {
   std::uint16_t width = 0;
   std::uint16_t height = 0;
+  std::vector<std::uint8_t> rgb;
 
   bool valid() const { return width != 0 && height != 0; }
 };
@@ -502,6 +508,91 @@ bool CaptureJPEG(const Identity &identity, int timeout_seconds, JPEGFrame &frame
   return true;
 }
 
+struct JpegError {
+  jpeg_error_mgr pub;
+  std::jmp_buf jump;
+};
+
+void JpegExit(j_common_ptr info) {
+  std::longjmp(reinterpret_cast<JpegError *>(info->err)->jump, 1);
+}
+
+bool DecodeJPEG(const std::vector<std::uint8_t> &jpeg, std::vector<std::uint8_t> &rgb,
+                int &width, int &height) {
+  jpeg_decompress_struct info{};
+  JpegError error{};
+  info.err = jpeg_std_error(&error.pub);
+  error.pub.error_exit = JpegExit;
+  if (setjmp(error.jump) != 0) {
+    jpeg_destroy_decompress(&info);
+    return false;
+  }
+  jpeg_create_decompress(&info);
+  jpeg_mem_src(&info, jpeg.data(), static_cast<unsigned long>(jpeg.size()));
+  if (jpeg_read_header(&info, TRUE) != JPEG_HEADER_OK) {
+    jpeg_destroy_decompress(&info);
+    return false;
+  }
+  info.out_color_space = JCS_RGB;
+  jpeg_start_decompress(&info);
+  width = static_cast<int>(info.output_width);
+  height = static_cast<int>(info.output_height);
+  if (width <= 0 || height <= 0 || info.output_components != 3) {
+    jpeg_destroy_decompress(&info);
+    return false;
+  }
+  rgb.resize(static_cast<std::size_t>(width) * height * 3);
+  while (info.output_scanline < info.output_height) {
+    JSAMPROW row = rgb.data() + static_cast<std::size_t>(info.output_scanline) * width * 3;
+    jpeg_read_scanlines(&info, &row, 1);
+  }
+  jpeg_finish_decompress(&info);
+  jpeg_destroy_decompress(&info);
+  return true;
+}
+
+bool EncodeJPEG(const std::uint8_t *rgb, int width, int height, int stride,
+                std::vector<std::uint8_t> &jpeg) {
+  jpeg_compress_struct info{};
+  JpegError error{};
+  info.err = jpeg_std_error(&error.pub);
+  error.pub.error_exit = JpegExit;
+  unsigned char *buffer = nullptr;
+  unsigned long size = 0;
+  if (setjmp(error.jump) != 0) {
+    if (buffer != nullptr)
+      free(buffer);
+    jpeg_destroy_compress(&info);
+    return false;
+  }
+  jpeg_create_compress(&info);
+  jpeg_mem_dest(&info, &buffer, &size);
+  info.image_width = static_cast<JDIMENSION>(width);
+  info.image_height = static_cast<JDIMENSION>(height);
+  info.input_components = 3;
+  info.in_color_space = JCS_RGB;
+  jpeg_set_defaults(&info);
+  jpeg_set_quality(&info, 80, TRUE);
+  jpeg_start_compress(&info, TRUE);
+  std::vector<std::uint8_t> packed(static_cast<std::size_t>(width) * 3);
+  while (info.next_scanline < info.image_height) {
+    const std::uint8_t *row = rgb + static_cast<std::size_t>(info.next_scanline) * stride;
+    if (stride == width * 3) {
+      JSAMPROW source = const_cast<JSAMPROW>(row);
+      jpeg_write_scanlines(&info, &source, 1);
+    } else {
+      std::memcpy(packed.data(), row, packed.size());
+      JSAMPROW source = packed.data();
+      jpeg_write_scanlines(&info, &source, 1);
+    }
+  }
+  jpeg_finish_compress(&info);
+  jpeg.assign(buffer, buffer + size);
+  free(buffer);
+  jpeg_destroy_compress(&info);
+  return !jpeg.empty();
+}
+
 std::string Base64(const std::vector<std::uint8_t> &data) {
   static constexpr char alphabet[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -612,19 +703,58 @@ json_object *CallTool(const std::string &name, json_object *arguments,
       return ToolResult("captured frame has invalid dimensions", true);
     screen.width = frame.width;
     screen.height = frame.height;
+    std::vector<std::uint8_t> rgb;
+    int decoded_width = 0;
+    int decoded_height = 0;
+    const bool decoded = DecodeJPEG(frame.payload, rgb, decoded_width, decoded_height) &&
+                         decoded_width == frame.width && decoded_height == frame.height;
+    const std::uint8_t *previous =
+        decoded && screen.rgb.size() == rgb.size() ? screen.rgb.data() : nullptr;
+    const Change change =
+        decoded ? CompareFrames(previous, rgb.data(), frame.width, frame.height)
+                : Change{};
+    if (decoded)
+      screen.rgb = std::move(rgb);
+
+    std::string text;
+    std::vector<std::uint8_t> image_jpeg = frame.payload;
+    if (!decoded || change.kind == ChangeKind::Full) {
+      text = "Screen size: " + std::to_string(frame.width) + "x" +
+             std::to_string(frame.height) +
+             " pixels. Full image. mouse_click_at and mouse_move x/y use this image's pixel coordinates.";
+    } else if (change.kind == ChangeKind::Unchanged) {
+      text = "Screen unchanged, " + std::to_string(frame.width) + "x" +
+             std::to_string(frame.height) +
+             ". No new image. Reuse the previous image and its coordinates.";
+      image_jpeg.clear();
+    } else if (!EncodeJPEG(screen.rgb.data() +
+                               (static_cast<std::size_t>(change.y) * frame.width + change.x) * 3,
+                           change.width, change.height, frame.width * 3, image_jpeg)) {
+      text = "Screen size: " + std::to_string(frame.width) + "x" +
+             std::to_string(frame.height) +
+             " pixels. Full image. mouse_click_at and mouse_move x/y use this image's pixel coordinates.";
+      image_jpeg = frame.payload;
+    } else {
+      text = "Changed region at origin " + std::to_string(change.x) + "," +
+             std::to_string(change.y) + " size " + std::to_string(change.width) + "x" +
+             std::to_string(change.height) + " inside a " + std::to_string(frame.width) +
+             "x" + std::to_string(frame.height) +
+             " screen. This image is only that region. Add " + std::to_string(change.x) +
+             " to the horizontal coordinate and " + std::to_string(change.y) +
+             " to the vertical coordinate before mouse_click_at or mouse_move.";
+    }
+
     json_object *result = json_object_new_object();
     json_object *content = json_object_new_array();
-    json_object_array_add(
-        content,
-        TextContent("Screen size: " + std::to_string(frame.width) + "x" +
-                    std::to_string(frame.height) +
-                    " pixels. mouse_move x/y use this image's pixel coordinates."));
-    json_object *image = json_object_new_object();
-    json_object_object_add(image, "type", json_object_new_string("image"));
-    const std::string encoded = Base64(frame.payload);
-    json_object_object_add(image, "data", json_object_new_string(encoded.c_str()));
-    json_object_object_add(image, "mimeType", json_object_new_string("image/jpeg"));
-    json_object_array_add(content, image);
+    json_object_array_add(content, TextContent(text));
+    if (!image_jpeg.empty()) {
+      json_object *image = json_object_new_object();
+      json_object_object_add(image, "type", json_object_new_string("image"));
+      const std::string encoded = Base64(image_jpeg);
+      json_object_object_add(image, "data", json_object_new_string(encoded.c_str()));
+      json_object_object_add(image, "mimeType", json_object_new_string("image/jpeg"));
+      json_object_array_add(content, image);
+    }
     json_object_object_add(result, "content", content);
     return result;
   }
@@ -858,7 +988,7 @@ json_object *ToolsList(const Identity &identity, const Config &config, std::stri
     return nullptr;
   json_object *result = json_object_new_object();
   json_object *tools = json_object_new_array();
-  json_object_array_add(tools, Tool("screen_capture", "Capture the current OneKVM screen as a JPEG image. The result reports the pixel dimensions used by mouse_move.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
+  json_object_array_add(tools, Tool("screen_capture", "Capture the current OneKVM screen. The first call returns the full JPEG. Later calls return only the changed region, or no image when the screen is unchanged. A changed region includes its origin in the full screen; add that origin before mouse_click_at or mouse_move.", R"({"type":"object","additionalProperties":false,"properties":{}})"));
   json_object_array_add(tools, Tool("keyboard_key", "Send one USB HID keyboard usage. Modifiers use the USB HID modifier bitmap.", R"({"type":"object","additionalProperties":false,"required":["usage"],"properties":{"usage":{"type":"integer","minimum":0,"maximum":255},"modifiers":{"type":"integer","minimum":0,"maximum":255,"default":0},"action":{"type":"string","enum":["press","down","up"],"default":"press"}}})"));
   json_object_array_add(tools, Tool("keyboard_type", "Type US-ASCII text using USB HID keyboard reports.", R"({"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string","maxLength":1024},"interval_ms":{"type":"integer","minimum":0,"maximum":1000,"default":10}}})"));
   json_object_array_add(tools, Tool("mouse_move", "Move the absolute mouse pointer to a pixel in the most recent screen_capture image. Call screen_capture first. x is zero at the left edge and y is zero at the top edge.", R"({"type":"object","additionalProperties":false,"required":["x","y"],"properties":{"x":{"type":"integer","minimum":0,"maximum":65534,"description":"Horizontal pixel coordinate in the most recent screen_capture image."},"y":{"type":"integer","minimum":0,"maximum":65534,"description":"Vertical pixel coordinate in the most recent screen_capture image."}}})"));

@@ -20,10 +20,16 @@ if(NOT JSON_C_STATIC_LIBRARY)
   message(FATAL_ERROR "Static json-c library not found")
 endif()
 
-add_executable(onekvm-mcp src/main.cpp)
+pkg_check_modules(LIBJPEG REQUIRED libjpeg)
+
+add_executable(onekvm-mcp src/main.cpp src/frame_diff.cpp)
 target_compile_options(onekvm-mcp PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(onekvm-mcp PRIVATE ${JSON_C_INCLUDE_DIRS})
-target_link_libraries(onekvm-mcp PRIVATE ${JSON_C_STATIC_LIBRARY} m)
+target_include_directories(onekvm-mcp PRIVATE ${JSON_C_INCLUDE_DIRS} ${LIBJPEG_INCLUDE_DIRS})
+target_link_libraries(onekvm-mcp PRIVATE ${JSON_C_STATIC_LIBRARY} ${LIBJPEG_LIBRARIES} m)
+
+add_executable(onekvm-mcp-frame-diff-test tests/frame_diff_test.cpp src/frame_diff.cpp)
+target_compile_options(onekvm-mcp-frame-diff-test PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(onekvm-mcp-frame-diff-test PRIVATE src)
 
 add_executable(onekvm-mcp-listen-test tests/listen_test.cpp)
 target_compile_options(onekvm-mcp-listen-test PRIVATE -Wall -Wextra -Wpedantic)
@@ -41,6 +47,7 @@ target_include_directories(onekvm-mcp-request-wait-test PRIVATE src)
 add_test(NAME request-wait COMMAND onekvm-mcp-request-wait-test)
 add_test(NAME listen COMMAND onekvm-mcp-listen-test)
 add_test(NAME tools COMMAND onekvm-mcp-tools-test)
+add_test(NAME frame-diff COMMAND onekvm-mcp-frame-diff-test)
 
 set(VERSION "${ONEKVM_EXTENSION_VERSION}")
 set(ARCH "${ONEKVM_EXTENSION_ARCH}")

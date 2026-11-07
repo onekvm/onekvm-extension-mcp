@@ -63,7 +63,7 @@ Treat the token as a password and use HTTPS whenever OneKVM is accessed over an 
 
 | Tool | Description |
 | --- | --- |
-| `screen_capture` | Returns the current screen as JPEG together with its pixel dimensions. |
+| `screen_capture` | Returns the current screen as JPEG. After the first call, returns only the changed region, or no image when the screen is unchanged. |
 | `keyboard_key` | Sends one USB HID keyboard usage with optional modifiers and `press`, `down`, or `up` behavior. |
 | `keyboard_type` | Types up to 1,024 bytes of US-ASCII text with an optional 0–1,000 ms interval between characters. |
 | `mouse_move` | Moves the absolute pointer to an `x`, `y` pixel coordinate from the most recent capture. |

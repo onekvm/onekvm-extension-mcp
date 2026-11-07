@@ -71,7 +71,7 @@ Authorization: Bearer <访问令牌>
 
 | 工具 | 说明 |
 | --- | --- |
-| `screen_capture` | 返回当前画面的 JPEG 图片及其像素尺寸。 |
+| `screen_capture` | 返回当前画面的 JPEG。第一次是整屏，之后只返回有变化的区域；画面没变则不返回图片。 |
 | `keyboard_key` | 发送一个 USB HID 键盘用法，可带修饰键和 `press`、`down` 或 `up` 行为。 |
 | `keyboard_type` | 输入最多 1,024 字节的 US-ASCII 文本，字符间隔可设为 0–1,000 ms。 |
 | `mouse_move` | 按最近一次截图中的 `x`、`y` 像素坐标移动绝对指针。 |

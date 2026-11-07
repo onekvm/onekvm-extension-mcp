@@ -181,8 +181,8 @@
   const builtinToolMessages = {
     screen_capture: {
       default: { title: 'Capture screen' },
-      zh: { title: '屏幕截图', description: '将当前 OneKVM 画面截为 JPEG 图像，并返回 mouse_move 使用的像素尺寸。' },
-      'zh-TW': { title: '螢幕擷取', description: '將目前 OneKVM 畫面擷取為 JPEG 圖像，並傳回 mouse_move 使用的像素尺寸。' },
+      zh: { title: '屏幕截图', description: '截取当前画面。第一次返回整屏，之后只返回有变化的区域；画面没变则不返回图片。变化区域要加上它在整屏中的起点，再传给移动或点击。' },
+      'zh-TW': { title: '螢幕擷取', description: '擷取目前畫面。第一次傳回整屏，之後只傳回有變化的區域；畫面沒變則不傳回圖片。變化區域要加上它在整屏中的起點，再傳給移動或點擊。' },
     },
     keyboard_key: {
       default: { title: 'Send key' },

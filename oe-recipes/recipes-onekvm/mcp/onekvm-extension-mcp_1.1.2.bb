@@ -11,7 +11,7 @@ SRCREV = "${ONEKVM_COMPONENT_SRCREV}"
 
 inherit cmake pkgconfig onekvm-extension
 
-DEPENDS = "json-c"
+DEPENDS = "json-c jpeg"
 ONEKVM_EXTENSION_ID = "mcp"
 ONEKVM_EXTENSION_API_VERSION = "2"
 ONEKVM_EXTENSION_MANIFEST_TEMPLATE = "${S}/manifest.json.in"
