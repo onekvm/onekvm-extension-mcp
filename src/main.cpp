@@ -700,6 +700,51 @@ json_object *CallTool(const std::string &name, json_object *arguments,
                             std::to_string(screen.height) + " screen")
                : ToolResult(error, true);
   }
+  if (name == "mouse_click_at") {
+    int x = 0, y = 0, count = 1;
+    std::string button = "left";
+    json_object *button_field = nullptr;
+    if (!GetInt(arguments, "x", x, 0, 65534) ||
+        !GetInt(arguments, "y", y, 0, 65534) ||
+        !GetInt(arguments, "count", count, 1, 2, true) ||
+        (json_object_object_get_ex(arguments, "button", &button_field) &&
+         !GetString(arguments, "button", button)))
+      return ToolResult("x, y, button, or count is invalid", true);
+    if (!screen.valid())
+      return ToolResult("Call screen_capture before mouse_click_at so the pixel dimensions are known", true);
+    if (x >= screen.width || y >= screen.height) {
+      return ToolResult("x and y must be inside the most recent " +
+                            std::to_string(screen.width) + "x" +
+                            std::to_string(screen.height) +
+                            " capture (x 0.." +
+                            std::to_string(screen.width - 1) + ", y 0.." +
+                            std::to_string(screen.height - 1) + ")",
+                        true);
+    }
+    const int mask = button == "left" ? 1 : button == "right" ? 2 : button == "middle" ? 4 : 0;
+    if (mask == 0)
+      return ToolResult("button must be left, right, or middle", true);
+    const auto absolute_x =
+        PixelToAbsoluteHID(static_cast<std::uint32_t>(x), screen.width);
+    const auto absolute_y =
+        PixelToAbsoluteHID(static_cast<std::uint32_t>(y), screen.height);
+    const std::string down =
+        "{\"buttons\":" + std::to_string(mask) +
+        ",\"x\":" + std::to_string(absolute_x) +
+        ",\"y\":" + std::to_string(absolute_y) + "}";
+    const std::string up =
+        "{\"buttons\":0,\"x\":" + std::to_string(absolute_x) +
+        ",\"y\":" + std::to_string(absolute_y) + "}";
+    for (int index = 0; index < count; ++index) {
+      if (!PostHID(identity, "/api/hid/mouse/absolute", down, error) ||
+          !PostHID(identity, "/api/hid/mouse/absolute", up, error))
+        return ToolResult(error, true);
+    }
+    return ToolResult("Clicked " + button + " at pixel " + std::to_string(x) +
+                      "," + std::to_string(y) + " on the " +
+                      std::to_string(screen.width) + "x" +
+                      std::to_string(screen.height) + " screen");
+  }
   if (name == "mouse_click") {
     std::string button;
     int count = 1;
@@ -817,7 +862,8 @@ json_object *ToolsList(const Identity &identity, const Config &config, std::stri
   json_object_array_add(tools, Tool("keyboard_key", "Send one USB HID keyboard usage. Modifiers use the USB HID modifier bitmap.", R"({"type":"object","additionalProperties":false,"required":["usage"],"properties":{"usage":{"type":"integer","minimum":0,"maximum":255},"modifiers":{"type":"integer","minimum":0,"maximum":255,"default":0},"action":{"type":"string","enum":["press","down","up"],"default":"press"}}})"));
   json_object_array_add(tools, Tool("keyboard_type", "Type US-ASCII text using USB HID keyboard reports.", R"({"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string","maxLength":1024},"interval_ms":{"type":"integer","minimum":0,"maximum":1000,"default":10}}})"));
   json_object_array_add(tools, Tool("mouse_move", "Move the absolute mouse pointer to a pixel in the most recent screen_capture image. Call screen_capture first. x is zero at the left edge and y is zero at the top edge.", R"({"type":"object","additionalProperties":false,"required":["x","y"],"properties":{"x":{"type":"integer","minimum":0,"maximum":65534,"description":"Horizontal pixel coordinate in the most recent screen_capture image."},"y":{"type":"integer","minimum":0,"maximum":65534,"description":"Vertical pixel coordinate in the most recent screen_capture image."}}})"));
-  json_object_array_add(tools, Tool("mouse_click", "Click a mouse button once or twice.", R"({"type":"object","additionalProperties":false,"required":["button"],"properties":{"button":{"type":"string","enum":["left","right","middle"]},"count":{"type":"integer","minimum":1,"maximum":2,"default":1}}})"));
+  json_object_array_add(tools, Tool("mouse_click_at", "Move the absolute pointer to a pixel in the most recent screen_capture image and click there. Call screen_capture first. x is zero at the left edge and y is zero at the top edge.", R"({"type":"object","additionalProperties":false,"required":["x","y"],"properties":{"x":{"type":"integer","minimum":0,"maximum":65534,"description":"Horizontal pixel coordinate in the most recent screen_capture image."},"y":{"type":"integer","minimum":0,"maximum":65534,"description":"Vertical pixel coordinate in the most recent screen_capture image."},"button":{"type":"string","enum":["left","right","middle"],"default":"left"},"count":{"type":"integer","minimum":1,"maximum":2,"default":1}}})"));
+  json_object_array_add(tools, Tool("mouse_click", "Click a mouse button once or twice at the pointer's current position.", R"({"type":"object","additionalProperties":false,"required":["button"],"properties":{"button":{"type":"string","enum":["left","right","middle"]},"count":{"type":"integer","minimum":1,"maximum":2,"default":1}}})"));
   json_object_array_add(tools, Tool("mouse_scroll", "Send a relative mouse-wheel report.", R"({"type":"object","additionalProperties":false,"required":["delta"],"properties":{"delta":{"type":"integer","minimum":-127,"maximum":127}}})"));
   ATXStatus atx;
   std::string ignored;

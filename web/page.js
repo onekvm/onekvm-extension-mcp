@@ -199,10 +199,15 @@
       zh: { title: '移动鼠标', description: '将绝对鼠标指针移至最近一次 screen_capture 图像中的像素位置。请先调用 screen_capture；x 从左侧的 0 开始，y 从顶部的 0 开始。' },
       'zh-TW': { title: '移動滑鼠', description: '將絕對滑鼠指標移至最近一次 screen_capture 圖像中的像素位置。請先呼叫 screen_capture；x 從左側的 0 開始，y 從頂部的 0 開始。' },
     },
+    mouse_click_at: {
+      default: { title: 'Move and click' },
+      zh: { title: '移动并点击', description: '把绝对指针移到最近一次屏幕截图中的像素并在该处点击。请先截图；x 从左侧的 0 开始，y 从顶部的 0 开始。' },
+      'zh-TW': { title: '移動並點擊', description: '把絕對指標移到最近一次螢幕擷取中的像素並在該處點擊。請先擷取；x 從左側的 0 開始，y 從頂部的 0 開始。' },
+    },
     mouse_click: {
       default: { title: 'Click mouse' },
-      zh: { title: '点击鼠标', description: '单击或双击一次鼠标按钮。' },
-      'zh-TW': { title: '點擊滑鼠', description: '單擊或雙擊一次滑鼠按鈕。' },
+      zh: { title: '点击鼠标', description: '在指针当前位置单击或双击左键、右键或中键。' },
+      'zh-TW': { title: '點擊滑鼠', description: '在指標目前位置單擊或雙擊左鍵、右鍵或中鍵。' },
     },
     mouse_scroll: {
       default: { title: 'Scroll mouse' },

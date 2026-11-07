@@ -75,12 +75,13 @@ Authorization: Bearer <访问令牌>
 | `keyboard_key` | 发送一个 USB HID 键盘用法，可带修饰键和 `press`、`down` 或 `up` 行为。 |
 | `keyboard_type` | 输入最多 1,024 字节的 US-ASCII 文本，字符间隔可设为 0–1,000 ms。 |
 | `mouse_move` | 按最近一次截图中的 `x`、`y` 像素坐标移动绝对指针。 |
-| `mouse_click` | 单击或双击鼠标左键、右键或中键。 |
+| `mouse_click_at` | 把绝对指针移到 `x`、`y` 像素并在该处点击。`button` 为 `left`、`right` 或 `middle`，`count` 为 1 或 2。 |
+| `mouse_click` | 在指针当前位置单击或双击左键、右键或中键。 |
 | `mouse_scroll` | 发送 -127 到 127 的相对滚轮值。 |
 | `atx_status` | 返回可用的电源灯和硬盘灯状态；仅在设备提供 ATX 控制时发布。 |
 | `atx_action` | 执行 `power_short`、`power_long` 或 `reset`；仅在设备提供 ATX 控制时发布。 |
 
-使用 `mouse_move` 前应先调用 `screen_capture`。坐标从左上角 `0,0` 开始，
+使用 `mouse_move` 或 `mouse_click_at` 前应先调用 `screen_capture`。坐标从左上角 `0,0` 开始，
 并且必须位于最近一次截图返回的尺寸范围内。
 
 `keyboard_type` 使用美式键盘布局，只接受 US-ASCII。它无法直接表达的按键

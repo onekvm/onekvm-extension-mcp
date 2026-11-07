@@ -67,12 +67,13 @@ Treat the token as a password and use HTTPS whenever OneKVM is accessed over an 
 | `keyboard_key` | Sends one USB HID keyboard usage with optional modifiers and `press`, `down`, or `up` behavior. |
 | `keyboard_type` | Types up to 1,024 bytes of US-ASCII text with an optional 0–1,000 ms interval between characters. |
 | `mouse_move` | Moves the absolute pointer to an `x`, `y` pixel coordinate from the most recent capture. |
-| `mouse_click` | Clicks the left, right, or middle button once or twice. |
+| `mouse_click_at` | Moves the absolute pointer to an `x`, `y` pixel and clicks there. `button` is `left`, `right`, or `middle`; `count` is 1 or 2. |
+| `mouse_click` | Clicks the left, right, or middle button once or twice at the pointer's current position. |
 | `mouse_scroll` | Sends a relative mouse-wheel value from -127 to 127. |
 | `atx_status` | Reports available power and disk LED state. Advertised only when the device exposes ATX control. |
 | `atx_action` | Performs `power_short`, `power_long`, or `reset`. Advertised only when the device exposes ATX control. |
 
-Call `screen_capture` before `mouse_move`. Coordinates start at `0,0` in the top-left corner and must remain inside the dimensions reported by the latest capture.
+Call `screen_capture` before `mouse_move` or `mouse_click_at`. Coordinates start at `0,0` in the top-left corner and must remain inside the dimensions reported by the latest capture.
 
 `keyboard_type` uses a US keyboard layout and accepts US-ASCII only. For keys or shortcuts that it cannot represent directly, use `keyboard_key` with USB HID usage IDs and modifier bits.
 
