@@ -18,6 +18,7 @@ It is installed separately from OneKVM Core, so you can enable, disable, or remo
 - Read the attached computer's power and disk LED state when ATX control is available
 - Briefly press the power button, hold it to force power off, or press reset when ATX control is available
 - Connect MCP clients through a stateless Streamable HTTP endpoint protected by a dedicated bearer token
+- Run a local MCP client such as Codex through the standard stdin/stdout transport as the dedicated `codex` user
 
 ## Install and enable
 
@@ -56,6 +57,8 @@ Authorization: Bearer <access-token>
 ```
 
 The endpoint accepts MCP over stateless Streamable HTTP and supports protocol versions `2024-11-05`, `2025-03-26`, and `2025-06-18`. Your MCP client must support custom HTTP authorization headers.
+
+The package also provides a local stdio entrypoint at `/usr/bin/onekvm-mcp-stdio` when the Codex integration package is installed. It forwards JSON-RPC lines to the enabled MCP service over its Unix socket. The service accepts this local transport only from the `codex` system user; network connections and other local users still require the bearer token.
 
 Treat the token as a password and use HTTPS whenever OneKVM is accessed over an untrusted network. Anyone with the token can view the connected computer, control its keyboard and mouse, and potentially operate its power controls.
 

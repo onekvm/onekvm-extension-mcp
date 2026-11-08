@@ -8,6 +8,7 @@
 #include <json-c/json.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -43,6 +44,7 @@ constexpr std::string_view kControlSocket = "/run/onekvm/extension-control.sock"
 constexpr std::string_view kMediaSocket = "/run/onekvm/extension-media.sock";
 constexpr std::size_t kMaxRequestBytes = 1U << 20;
 constexpr std::size_t kMaxFrameBytes = 8U << 20;
+constexpr std::string_view kLocalAgentUser = "codex";
 volatile sig_atomic_t stopped = 0;
 
 void Stop(int) { stopped = 1; }
@@ -390,6 +392,70 @@ bool ControlRequest(const Identity &identity, std::string_view method,
     return false;
   }
   response_body.assign(line.substr(body + 4));
+  return true;
+}
+
+bool LocalAgentPeer(int fd) {
+  ucred credentials{};
+  socklen_t length = sizeof(credentials);
+  if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credentials, &length) != 0)
+    return false;
+  passwd *user = getpwnam(std::string(kLocalAgentUser).c_str());
+  return user != nullptr && credentials.uid == user->pw_uid;
+}
+
+bool LocalMCPRequest(std::string_view payload, std::string &response_body,
+                     int &status, std::string &error) {
+  const int fd = ConnectUnix(SocketPath(), 15, error);
+  if (fd < 0) {
+    error = "connect local MCP service: " + error;
+    return false;
+  }
+  const std::string request =
+      "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n"
+      "Content-Length: " + std::to_string(payload.size()) +
+      "\r\nConnection: close\r\n\r\n" + std::string(payload);
+  if (!WriteAll(fd, request, error)) {
+    close(fd);
+    return false;
+  }
+  std::array<char, 4096> buffer{};
+  std::string received;
+  while (received.size() <= kMaxRequestBytes + (64U << 10)) {
+    const auto count = recv(fd, buffer.data(), buffer.size(), 0);
+    if (count < 0 && errno == EINTR)
+      continue;
+    if (count < 0) {
+      error = "read local MCP service: " + std::string(std::strerror(errno));
+      close(fd);
+      return false;
+    }
+    if (count == 0)
+      break;
+    received.append(buffer.data(), static_cast<std::size_t>(count));
+  }
+  close(fd);
+  if (received.empty() || received.size() > kMaxRequestBytes + (64U << 10)) {
+    error = "invalid local MCP service response";
+    return false;
+  }
+  const auto first_end = received.find("\r\n");
+  const auto first_space = received.find(' ');
+  if (first_end == std::string::npos || first_space == std::string::npos ||
+      first_space > first_end ||
+      std::from_chars(received.data() + first_space + 1,
+                      received.data() + first_end, status)
+              .ec != std::errc{}) {
+    error = "invalid local MCP service status";
+    return false;
+  }
+  const auto body = received.find("\r\n\r\n");
+  if (body == std::string::npos) {
+    error = "invalid local MCP service response";
+    return false;
+  }
+  response_body.assign(received.data() + body + 4,
+                       received.size() - body - 4);
   return true;
 }
 
@@ -1275,7 +1341,7 @@ void SendHTTP(int fd, int status, std::string_view content_type,
 }
 
 void HandleClient(int fd, const Config &config, const Identity &identity,
-                  ScreenGeometry &screen) {
+                  ScreenGeometry &screen, bool local_socket) {
   timeval timeout{15, 0};
   setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
   setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
@@ -1295,8 +1361,10 @@ void HandleClient(int fd, const Config &config, const Identity &identity,
   }
   const auto authorization = request.headers.find("authorization");
   const std::string expected = "Bearer " + config.access_token;
-  if (config.access_token.empty() || authorization == request.headers.end() ||
-      !ConstantTimeEqual(authorization->second, expected)) {
+  const bool token_authorized =
+      !config.access_token.empty() && authorization != request.headers.end() &&
+      ConstantTimeEqual(authorization->second, expected);
+  if (!token_authorized && !(local_socket && LocalAgentPeer(fd))) {
     SendHTTP(fd, 401, "application/json", "{\"error\":\"invalid MCP access token\"}\n");
     return;
   }
@@ -1436,7 +1504,7 @@ int ListenTCP(const Config &config, std::string &error) {
 }
 
 bool AcceptReady(int listener, const Config &config, const Identity &identity,
-                 ScreenGeometry &screen) {
+                 ScreenGeometry &screen, bool local_socket) {
   while (!stopped) {
     const int client = accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
     if (client < 0) {
@@ -1447,10 +1515,35 @@ bool AcceptReady(int listener, const Config &config, const Identity &identity,
       std::cerr << "onekvm-mcp: accept: " << std::strerror(errno) << '\n';
       return false;
     }
-    HandleClient(client, config, identity, screen);
+    HandleClient(client, config, identity, screen, local_socket);
     close(client);
   }
   return true;
+}
+
+int Stdio() {
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back();
+    if (line.empty())
+      continue;
+    std::string response;
+    int status = 0;
+    std::string error;
+    if (!LocalMCPRequest(line, response, status, error)) {
+      std::cerr << "onekvm-mcp: " << error << '\n';
+      return 1;
+    }
+    if (status == 202)
+      continue;
+    if (status < 200 || status >= 300 || response.empty()) {
+      std::cerr << "onekvm-mcp: local MCP service returned HTTP " << status << '\n';
+      return 1;
+    }
+    std::cout << response << '\n' << std::flush;
+  }
+  return 0;
 }
 
 int Serve() {
@@ -1508,7 +1601,8 @@ int Serve() {
         break;
       }
       if ((listener.revents & POLLIN) != 0 &&
-          !AcceptReady(listener.fd, config, identity, screen)) {
+          !AcceptReady(listener.fd, config, identity, screen,
+                       listener.fd == unix_listener)) {
         failed = true;
         break;
       }
@@ -1541,10 +1635,12 @@ int main(int argc, char **argv) {
         return 0;
       }
     }
+  } else if (argc == 2 && std::string_view(argv[1]) == "--stdio") {
+    return Stdio();
   } else if (argc == 1) {
     return Serve();
   } else {
-    error = "usage: onekvm-mcp [--controller|--health|--tools]";
+    error = "usage: onekvm-mcp [--controller|--health|--tools|--stdio]";
   }
   std::cerr << "onekvm-mcp: " << error << '\n';
   return 1;

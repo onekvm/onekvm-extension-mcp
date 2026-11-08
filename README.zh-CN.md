@@ -21,6 +21,7 @@
 - 在设备支持 ATX 时读取目标计算机的电源灯和硬盘灯状态
 - 在设备支持 ATX 时短按电源键、长按强制关机或按下重启键
 - 通过独立 Bearer Token 保护的无状态 Streamable HTTP 端点连接 MCP 客户端
+- 让 Codex 等本地 Agent 以独立的 `codex` 用户通过标准 stdin/stdout 接入
 
 ## 安装与启用
 
@@ -63,6 +64,11 @@ Authorization: Bearer <访问令牌>
 
 端点使用无状态 Streamable HTTP，支持 MCP 协议版本 `2024-11-05`、
 `2025-03-26` 和 `2025-06-18`。MCP 客户端必须支持自定义 HTTP 鉴权头。
+
+安装 Codex 集成包后还会提供 `/usr/bin/onekvm-mcp-stdio` 本地入口。它通过
+Unix Socket 把 stdin/stdout 中的 JSON-RPC 行转发给已启用的 MCP 服务。服务只
+允许 `codex` 系统用户通过该本地入口免令牌接入；网络连接和其他本地用户仍需
+Bearer Token。
 
 请将令牌视为密码；通过不可信网络访问 OneKVM 时必须使用 HTTPS。任何持有
 令牌的人都可能看到目标计算机画面、控制键盘和鼠标，并可能操作电源控制。
