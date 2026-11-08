@@ -475,9 +475,9 @@
           h('table', { class: 'mcp-tool-table', 'aria-labelledby': 'mcp-tool-list-title' }, [
             h('thead', [h('tr', ['toolName', 'toolSource', 'toolStatus'].map((key) => h('th', { scope: 'col' }, t(key))))]),
             h('tbody', filtered.value.length ? visible.value.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
-              h('td', [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
-              h('td', tool.sourceName),
-              h('td', [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
+              h('td', { 'data-label': t('toolName') }, [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
+              h('td', { 'data-label': t('toolSource') }, tool.sourceName),
+              h('td', { 'data-label': t('toolStatus') }, [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
             ])) : [h('tr', [h('td', { colspan: 3 }, t('toolsNoMatch'))])]),
           ]),
         ]),
@@ -532,36 +532,38 @@
         ]),
         h('details', { class: 'mcp-card mcp-advanced' }, [
           h('summary', t('advanced')),
-          h('div', { class: 'mcp-advanced-grid' }, [
-            h('p', { class: 'mcp-hint mcp-span' }, t('directHint')),
-            settingField('mcp-listen-mode', t('listen'), h(NSelect, {
-              value: props.draft.mode, inputProps: inputProps('mcp-listen-mode'),
-              options: [{ label: t('listenAll'), value: 'all' }, { label: t('listenInterface'), value: 'interface' },
-                { label: t('listenAddress'), value: 'address' }], disabled: props.saving,
-              'onUpdate:value': (value) => change('mode', value),
-            })),
-            settingField('mcp-listen-port', t('port'), h(NInputNumber, {
-              value: props.draft.port, min: 1024, max: 65535, precision: 0, disabled: props.saving,
-              inputProps: inputProps('mcp-listen-port'), 'onUpdate:value': (value) => change('port', value),
-            })),
-            props.draft.mode === 'interface' ? settingField('mcp-listen-interface', t('listenInterface'), h(NSelect, {
-              value: props.draft.interface || null, options: props.interfaces, placeholder: t('interfacePlaceholder'),
-              filterable: true, disabled: props.saving, inputProps: inputProps('mcp-listen-interface'),
-              'onUpdate:value': (value) => change('interface', String(value || '')),
-            }), true) : null,
-            props.draft.mode === 'interface' && props.interfaceError
-              ? h(NAlert, { class: 'mcp-span', type: 'warning', showIcon: false }, { default: () => props.interfaceError }) : null,
-            props.draft.mode === 'address' ? settingField('mcp-listen-address', t('listenAddress'), h(NInput, {
-              value: props.draft.address, placeholder: t('addressPlaceholder'), maxlength: 64, disabled: props.saving,
-              inputProps: inputProps('mcp-listen-address'),
-              status: props.draft.address && !validIP(props.draft.address.trim()) ? 'error' : undefined,
-              'onUpdate:value': (value) => change('address', String(value || '')),
-            }), true) : null,
-            settingField('mcp-direct-address', t('direct'), h('output', { class: 'mcp-derived-address' }, props.direct), true),
-            settingField('mcp-capture-timeout', t('timeout'), h(NInputNumber, {
-              value: props.draft.timeout, min: 1, max: 15, precision: 0, disabled: props.saving,
-              inputProps: inputProps('mcp-capture-timeout'), 'onUpdate:value': (value) => change('timeout', value),
-            })),
+          h('div', { class: 'mcp-advanced-body' }, [
+            h('div', { class: 'mcp-advanced-grid' }, [
+              h('p', { class: 'mcp-hint mcp-span' }, t('directHint')),
+              settingField('mcp-listen-mode', t('listen'), h(NSelect, {
+                value: props.draft.mode, inputProps: inputProps('mcp-listen-mode'),
+                options: [{ label: t('listenAll'), value: 'all' }, { label: t('listenInterface'), value: 'interface' },
+                  { label: t('listenAddress'), value: 'address' }], disabled: props.saving,
+                'onUpdate:value': (value) => change('mode', value),
+              })),
+              settingField('mcp-listen-port', t('port'), h(NInputNumber, {
+                value: props.draft.port, min: 1024, max: 65535, precision: 0, disabled: props.saving,
+                inputProps: inputProps('mcp-listen-port'), 'onUpdate:value': (value) => change('port', value),
+              })),
+              props.draft.mode === 'interface' ? settingField('mcp-listen-interface', t('listenInterface'), h(NSelect, {
+                value: props.draft.interface || null, options: props.interfaces, placeholder: t('interfacePlaceholder'),
+                filterable: true, disabled: props.saving, inputProps: inputProps('mcp-listen-interface'),
+                'onUpdate:value': (value) => change('interface', String(value || '')),
+              }), true) : null,
+              props.draft.mode === 'interface' && props.interfaceError
+                ? h(NAlert, { class: 'mcp-span', type: 'warning', showIcon: false }, { default: () => props.interfaceError }) : null,
+              props.draft.mode === 'address' ? settingField('mcp-listen-address', t('listenAddress'), h(NInput, {
+                value: props.draft.address, placeholder: t('addressPlaceholder'), maxlength: 64, disabled: props.saving,
+                inputProps: inputProps('mcp-listen-address'),
+                status: props.draft.address && !validIP(props.draft.address.trim()) ? 'error' : undefined,
+                'onUpdate:value': (value) => change('address', String(value || '')),
+              }), true) : null,
+              settingField('mcp-direct-address', t('direct'), h('output', { class: 'mcp-derived-address' }, props.direct), true),
+              settingField('mcp-capture-timeout', t('timeout'), h(NInputNumber, {
+                value: props.draft.timeout, min: 1, max: 15, precision: 0, disabled: props.saving,
+                inputProps: inputProps('mcp-capture-timeout'), 'onUpdate:value': (value) => change('timeout', value),
+              })),
+            ]),
           ]),
         ]),
       ])
@@ -829,9 +831,12 @@
       .mcp-save { display: flex; justify-content: flex-end; }
       .mcp-token-dialog { display: grid; gap: 12px; }
       .mcp-token-dialog p { margin: 0; }
-      .mcp-access-card { grid-template-columns: minmax(0, 1fr); }
+      .mcp-access-card { grid-template-columns: minmax(220px, .38fr) minmax(0, 1fr); align-items: start; }
+      .mcp-access-card > .mcp-token-heading, .mcp-access-card > .mcp-field, .mcp-access-card > .mcp-hint,
+      .mcp-access-card > .n-alert { grid-column: 1 / -1; }
       .mcp-access-list { display: grid; gap: 12px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
-      .mcp-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(140px, 180px); gap: 12px; align-items: center; }
+      .mcp-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; align-items: center; }
+      .mcp-access-row > .n-select { grid-column: 1 / -1; }
       .mcp-access-name { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
       .mcp-access-name small { color: var(--n-text-color-3, #888); }
       .mcp-tool-list { display: grid; gap: 12px; min-width: 0; }
@@ -844,10 +849,29 @@
       .mcp-tool-table th, .mcp-tool-table td { padding: 12px 8px; border-bottom: 1px solid var(--n-border-color, #444); vertical-align: top; }
       .mcp-tool-table th { font-weight: 600; }
       .mcp-tool-table td:first-child { width: 65%; overflow-wrap: anywhere; }
+      .mcp-tool-table td:nth-child(2), .mcp-tool-table td:nth-child(3) { white-space: nowrap; }
       .mcp-tool-table code, .mcp-tool-table strong { display: block; }
       .mcp-tool-table p { margin: 4px 0 0; color: var(--n-text-color-3, #888); line-height: 1.5; }
-      @media (max-width: 440px) { .mcp-access-row { grid-template-columns: minmax(0, 1fr) auto; } .mcp-access-row > .n-select { grid-column: 1 / -1; } }
-      @media (max-width: 700px) { .mcp-card, .mcp-token-actions, .mcp-advanced-grid, .mcp-tool-filters { grid-template-columns: 1fr; } .mcp-token-actions .n-button { width: 100%; } }
+      .mcp-advanced-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 180ms cubic-bezier(.23, 1, .32, 1), opacity 140ms ease-out; }
+      .mcp-advanced[open] .mcp-advanced-body { grid-template-rows: 1fr; opacity: 1; }
+      .mcp-advanced-grid { min-height: 0; overflow: hidden; }
+      @media (max-width: 900px) { .mcp-access-card { grid-template-columns: minmax(0, 1fr); } .mcp-access-list, .mcp-tool-list { grid-column: 1 / -1; } }
+      @media (max-width: 700px) {
+        .mcp-card, .mcp-token-actions, .mcp-advanced-grid, .mcp-tool-filters { grid-template-columns: 1fr; }
+        .mcp-token-actions .n-button { width: 100%; }
+        .mcp-tool-scroll { overflow-x: visible; }
+        .mcp-tool-table { min-width: 0; display: block; border-collapse: separate; }
+        .mcp-tool-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+        .mcp-tool-table tbody { display: grid; gap: 8px; }
+        .mcp-tool-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px; border: 1px solid var(--n-border-color, #444); border-radius: 8px; }
+        .mcp-tool-table td, .mcp-tool-table td:first-child { display: block; width: auto; padding: 0; border: 0; }
+        .mcp-tool-table td:first-child { grid-column: 1 / -1; }
+        .mcp-tool-table td:nth-child(2) { color: var(--n-text-color-3, #888); white-space: normal; }
+        .mcp-tool-table td:nth-child(2)::before { content: attr(data-label) ' · '; color: var(--n-text-color-3, #888); }
+        .mcp-tool-table td:nth-child(3) { justify-self: end; align-self: start; }
+        .mcp-tool-table td[colspan] { grid-column: 1 / -1; }
+      }
+      @media (prefers-reduced-motion: reduce) { .mcp-advanced-body { transition: none; } }
     `],
   })
 })()
