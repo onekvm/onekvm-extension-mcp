@@ -88,9 +88,10 @@ Access defaults to allowed and can be changed to prohibited. Each plugin can
 follow the default, be explicitly allowed, or be explicitly prohibited. Save
 settings to apply changes. Prohibited tools are hidden from MCP clients and direct calls using
 cached names are rejected. Built-in capture, HID and ATX tools remain available.
-The access list shows plugins with registered tools and plugins with saved
-overrides; a retained override without tools is labeled accordingly. The tool
-list groups tools by source, with each source's tool count and a Details button.
+The tool list groups tools by source, with each source's tool count and a Details
+button. Each plugin source has its access selector before the tool count.
+Plugins with saved overrides remain in the list even without registered tools,
+with a No registered tools label and an access selector to change the override.
 Sources start collapsed; expand one to see tool names, descriptions and availability
 under the saved settings, then use Collapse to close it.
 Search matches tool names, descriptions and sources without regard to case.

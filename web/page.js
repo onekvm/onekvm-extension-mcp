@@ -443,15 +443,19 @@
 
   const ToolSourceGroup = defineComponent({
     name: 'MCPToolSourceGroup',
-    props: { group: Object },
-    setup(props) {
+    props: { group: Object, disabled: Boolean },
+    emits: ['rule'],
+    setup(props, { emit }) {
       const expanded = shallowRef(false)
       const page = shallowRef(1)
       const pageSize = shallowRef(10)
       const pageCount = computed(() => Math.max(1, Math.ceil(props.group.tools.length / pageSize.value)))
       const currentPage = computed(() => Math.min(page.value, pageCount.value))
       const visible = computed(() => props.group.tools.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-      watch(() => props.group.tools, () => { page.value = 1 })
+      watch(() => props.group.tools, () => {
+        page.value = 1
+        if (!props.group.tools.length) expanded.value = false
+      })
       return () => {
         const group = props.group
         const titleID = `mcp-source-${group.source}-title`
@@ -462,12 +466,19 @@
               h('h4', { id: titleID }, group.sourceName),
               group.sourceName !== group.source ? h('small', group.source) : null,
             ]),
-            h(NTag, { bordered: false }, { default: () => `${t('toolCount')}: ${group.tools.length}` }),
-            h(NButton, { class: 'mcp-source-details', secondary: true,
-              'aria-expanded': expanded.value, 'aria-controls': panelID,
-              'aria-label': `${group.sourceName} · ${t(expanded.value ? 'collapse' : 'details')}`,
-              onClick: () => { expanded.value = !expanded.value },
-            }, { default: () => t(expanded.value ? 'collapse' : 'details') }),
+            h('div', { class: 'mcp-source-actions' }, [
+              group.source !== 'mcp' ? h(NSelect, { class: 'mcp-source-policy', value: group.rule, disabled: props.disabled,
+                options: [{ label: t('followDefault'), value: 'default' }, { label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
+                'aria-label': `${group.sourceName} · ${t('toolAccess')}`,
+                'onUpdate:value': (value) => emit('rule', group.source, value),
+              }) : null,
+              h(NTag, { bordered: false }, { default: () => group.tools.length ? `${t('toolCount')}: ${group.tools.length}` : t('noTools') }),
+              h(NButton, { class: 'mcp-source-details', secondary: true, disabled: !group.tools.length,
+                'aria-expanded': expanded.value, 'aria-controls': panelID,
+                'aria-label': `${group.sourceName} · ${t(expanded.value ? 'collapse' : 'details')}`,
+                onClick: () => { expanded.value = !expanded.value },
+              }, { default: () => t(expanded.value ? 'collapse' : 'details') }),
+            ]),
           ]),
           h('div', { id: panelID, hidden: !expanded.value, class: 'mcp-source-tools' }, expanded.value ? [
             h('table', { class: 'mcp-tool-table', 'aria-labelledby': titleID }, [
@@ -492,24 +503,34 @@
 
   const ToolList = defineComponent({
     name: 'MCPToolList',
-    props: { tools: Array },
-    setup(props) {
+    props: { tools: Array, rows: Array, disabled: Boolean },
+    emits: ['rule'],
+    setup(props, { emit }) {
       const query = shallowRef('')
       const status = shallowRef('all')
+      const terms = computed(() => query.value.trim().toLowerCase().split(/\s+/).filter(Boolean))
       const filtered = computed(() => {
-        const terms = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
-        if (!terms.length && status.value === 'all') return props.tools
+        if (!terms.value.length && status.value === 'all') return props.tools
         return props.tools.filter((tool) => {
           if ((status.value === 'available' && !tool.allowed) || (status.value === 'prohibited' && tool.allowed)) return false
           const text = [tool.name, tool.title, tool.description, tool.source, tool.sourceName].join('\n').toLowerCase()
-          return terms.every((term) => text.includes(term))
+          return terms.value.every((term) => text.includes(term))
         })
       })
       const groups = computed(() => {
         const sources = new Map()
+        const rows = new Map(props.rows.map((row) => [row.id, row]))
         for (const tool of filtered.value) {
-          if (!sources.has(tool.source)) sources.set(tool.source, { source: tool.source, sourceName: tool.sourceName, tools: [] })
+          if (!sources.has(tool.source)) sources.set(tool.source, {
+            source: tool.source, sourceName: tool.sourceName, rule: rows.get(tool.source)?.rule || 'default', tools: [],
+          })
           sources.get(tool.source).tools.push(tool)
+        }
+        for (const row of props.rows) {
+          const text = [row.id, row.name].join('\n').toLowerCase()
+          if (!row.count && status.value === 'all' && terms.value.every((term) => text.includes(term))) {
+            sources.set(row.id, { source: row.id, sourceName: row.name, rule: row.rule, tools: [] })
+          }
         }
         return [...sources.values()]
       })
@@ -529,7 +550,9 @@
         h('p', { id: 'mcp-tool-filter-results', class: 'mcp-hint', role: 'status', 'aria-atomic': 'true' },
           t('toolFilterResults').replace('{shown}', filtered.value.length).replace('{total}', props.tools.length)),
         groups.value.length ? h('div', { class: 'mcp-source-list' }, groups.value.map((group) =>
-          h(ToolSourceGroup, { key: group.source, group }))) : h('p', { class: 'mcp-hint' }, t('toolsNoMatch')),
+          h(ToolSourceGroup, { key: group.source, group, disabled: props.disabled,
+            onRule: (id, value) => emit('rule', id, value),
+          }))) : h('p', { class: 'mcp-hint' }, t('toolsNoMatch')),
       ])
     },
   })
@@ -630,16 +653,10 @@
         h('p', { class: 'mcp-hint' }, t('toolHint')),
         props.error ? h(NAlert, { type: 'error', showIcon: false }, { default: () => props.error }) : null,
         !props.rows.length ? h('p', { class: 'mcp-hint', role: 'status' }, props.loading ? t('pluginsLoading') : props.error ? '' : t('pluginsEmpty')) : null,
-        !props.error ? h('div', { class: 'mcp-access-list' }, props.rows.map((row) => h('div', { class: 'mcp-access-row', key: row.id, 'data-plugin': row.id }, [
-          h('div', { class: 'mcp-access-name' }, [h('strong', row.name), row.name !== row.id ? h('small', row.id) : null]),
-          h(NTag, { bordered: false }, { default: () => row.count ? `${t('toolCount')}: ${row.count}` : t('noTools') }),
-          h(NSelect, { value: row.rule, disabled: props.disabled,
-            options: [{ label: t('followDefault'), value: 'default' }, { label: t('allow'), value: 'allow' }, { label: t('deny'), value: 'deny' }],
-            'aria-label': `${row.name} · ${t('toolAccess')}`,
-            'onUpdate:value': (value) => emit('rule', row.id, value),
-          }),
-        ]))) : null,
-        !props.error && props.tools.length ? h(ToolList, { tools: props.tools }) : null,
+        !props.error && (props.tools.length || props.rows.length) ? h(ToolList, {
+          tools: props.tools, rows: props.rows, disabled: props.disabled,
+          onRule: (id, value) => emit('rule', id, value),
+        }) : null,
       ])
     },
   })
@@ -873,12 +890,7 @@
       .mcp-save { display: flex; justify-content: flex-end; }
       .mcp-token-dialog { display: grid; gap: 12px; }
       .mcp-token-dialog p { margin: 0; }
-      .mcp-access-card { grid-template-columns: minmax(220px, .38fr) minmax(0, 1fr); align-items: start; }
-      .mcp-access-card > .mcp-token-heading, .mcp-access-card > .mcp-field, .mcp-access-card > .mcp-hint,
-      .mcp-access-card > .n-alert { grid-column: 1 / -1; }
-      .mcp-access-list { display: grid; gap: 12px; max-height: 360px; overflow-y: auto; padding-right: 4px; }
-      .mcp-access-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; align-items: center; }
-      .mcp-access-row > .n-select { grid-column: 1 / -1; }
+      .mcp-access-card { grid-template-columns: minmax(0, 1fr); }
       .mcp-access-name { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
       .mcp-access-name small { color: var(--n-text-color-3, #888); }
       .mcp-tool-list { display: grid; gap: 12px; min-width: 0; }
@@ -888,7 +900,9 @@
       .mcp-tool-pagination .n-pagination { flex-wrap: wrap; justify-content: flex-end; }
       .mcp-source-list { display: grid; gap: 12px; }
       .mcp-source-group { min-width: 0; border: 1px solid var(--n-border-color, #444); border-radius: 8px; }
-      .mcp-source-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px; }
+      .mcp-source-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; }
+      .mcp-source-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+      .mcp-source-policy { width: 180px; }
       .mcp-source-heading h4 { margin: 0; font-size: 14px; font-weight: 600; }
       .mcp-source-details { min-height: 40px; }
       .mcp-source-tools { min-width: 0; padding: 0 12px 12px; }
@@ -903,9 +917,10 @@
       .mcp-advanced-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 180ms cubic-bezier(.23, 1, .32, 1), opacity 140ms ease-out; }
       .mcp-advanced[open] .mcp-advanced-body { grid-template-rows: 1fr; opacity: 1; }
       .mcp-advanced-grid { min-height: 0; overflow: hidden; }
-      @media (max-width: 900px) { .mcp-access-card { grid-template-columns: minmax(0, 1fr); } .mcp-access-list, .mcp-tool-list { grid-column: 1 / -1; } }
       @media (max-width: 700px) {
-        .mcp-card, .mcp-token-actions, .mcp-advanced-grid, .mcp-tool-filters { grid-template-columns: 1fr; }
+        .mcp-card, .mcp-token-actions, .mcp-advanced-grid, .mcp-tool-filters, .mcp-source-heading { grid-template-columns: 1fr; }
+        .mcp-source-actions { flex-wrap: wrap; }
+        .mcp-source-policy { flex: 1; width: auto; min-width: 120px; }
         .mcp-token-actions .n-button { width: 100%; }
         .mcp-tool-table { min-width: 0; display: block; border-collapse: separate; }
         .mcp-tool-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
