@@ -46,6 +46,8 @@
       toolList: 'Tool list',
       toolName: 'Tool',
       toolSource: 'Source',
+      details: 'Details',
+      collapse: 'Collapse',
       toolStatus: 'Status',
       builtin: 'MCP built-in',
       available: 'Available',
@@ -103,6 +105,8 @@
       toolList: '工具列表',
       toolName: '工具',
       toolSource: '来源',
+      details: '详情',
+      collapse: '收起',
       toolStatus: '状态',
       builtin: 'MCP 内置',
       available: '可用',
@@ -160,6 +164,8 @@
       toolList: '工具清單',
       toolName: '工具',
       toolSource: '來源',
+      details: '詳情',
+      collapse: '收合',
       toolStatus: '狀態',
       builtin: 'MCP 內建',
       available: '可用',
@@ -435,14 +441,61 @@
     }
   }
 
+  const ToolSourceGroup = defineComponent({
+    name: 'MCPToolSourceGroup',
+    props: { group: Object },
+    setup(props) {
+      const expanded = shallowRef(false)
+      const page = shallowRef(1)
+      const pageSize = shallowRef(10)
+      const pageCount = computed(() => Math.max(1, Math.ceil(props.group.tools.length / pageSize.value)))
+      const currentPage = computed(() => Math.min(page.value, pageCount.value))
+      const visible = computed(() => props.group.tools.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
+      watch(() => props.group.tools, () => { page.value = 1 })
+      return () => {
+        const group = props.group
+        const titleID = `mcp-source-${group.source}-title`
+        const panelID = `mcp-source-${group.source}-tools`
+        return h('section', { class: 'mcp-source-group', 'data-source': group.source, 'aria-labelledby': titleID }, [
+          h('div', { class: 'mcp-source-heading' }, [
+            h('div', { class: 'mcp-access-name' }, [
+              h('h4', { id: titleID }, group.sourceName),
+              group.sourceName !== group.source ? h('small', group.source) : null,
+            ]),
+            h(NTag, { bordered: false }, { default: () => `${t('toolCount')}: ${group.tools.length}` }),
+            h(NButton, { class: 'mcp-source-details', secondary: true,
+              'aria-expanded': expanded.value, 'aria-controls': panelID,
+              'aria-label': `${group.sourceName} · ${t(expanded.value ? 'collapse' : 'details')}`,
+              onClick: () => { expanded.value = !expanded.value },
+            }, { default: () => t(expanded.value ? 'collapse' : 'details') }),
+          ]),
+          h('div', { id: panelID, hidden: !expanded.value, class: 'mcp-source-tools' }, expanded.value ? [
+            h('table', { class: 'mcp-tool-table', 'aria-labelledby': titleID }, [
+              h('thead', [h('tr', ['toolName', 'toolStatus'].map((key) => h('th', { scope: 'col' }, t(key))))]),
+              h('tbody', visible.value.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
+                h('td', { 'data-label': t('toolName') }, [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
+                h('td', { 'data-label': t('toolStatus') }, [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
+              ]))),
+            ]),
+            group.tools.length > 10 ? h('nav', { class: 'mcp-tool-pagination', 'aria-label': `${group.sourceName} · ${t('toolPagination')}` }, [
+              h(NPagination, { page: currentPage.value, pageSize: pageSize.value, itemCount: group.tools.length,
+                pageSlot: 3, showSizePicker: true, pageSizes: [10, 20, 50].map((value) => ({ value, label: t('toolsPerPage').replace('{count}', value) })),
+                'onUpdate:page': (value) => { page.value = value },
+                'onUpdate:pageSize': (value) => { pageSize.value = value; page.value = 1 },
+              }),
+            ]) : null,
+          ] : []),
+        ])
+      }
+    },
+  })
+
   const ToolList = defineComponent({
     name: 'MCPToolList',
     props: { tools: Array },
     setup(props) {
       const query = shallowRef('')
       const status = shallowRef('all')
-      const page = shallowRef(1)
-      const pageSize = shallowRef(10)
       const filtered = computed(() => {
         const terms = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
         if (!terms.length && status.value === 'all') return props.tools
@@ -452,42 +505,31 @@
           return terms.every((term) => text.includes(term))
         })
       })
-      const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
-      const currentPage = computed(() => Math.min(page.value, pageCount.value))
-      const visible = computed(() => filtered.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value))
-      watch(() => filtered.value.length, () => { page.value = currentPage.value })
+      const groups = computed(() => {
+        const sources = new Map()
+        for (const tool of filtered.value) {
+          if (!sources.has(tool.source)) sources.set(tool.source, { source: tool.source, sourceName: tool.sourceName, tools: [] })
+          sources.get(tool.source).tools.push(tool)
+        }
+        return [...sources.values()]
+      })
       return () => h('div', { class: 'mcp-tool-list' }, [
         h('h3', { id: 'mcp-tool-list-title' }, t('toolList')),
         h('p', { class: 'mcp-hint' }, t('toolListHint')),
         h('div', { class: 'mcp-tool-filters' }, [settingField('mcp-tool-filter', t('filterTools'), h(NInput, {
           value: query.value, clearable: true, placeholder: t('toolFilterPlaceholder'),
           inputProps: { id: 'mcp-tool-filter', 'aria-labelledby': 'mcp-tool-filter-label', 'aria-describedby': 'mcp-tool-filter-results' },
-          'onUpdate:value': (value) => { query.value = value || ''; page.value = 1 },
+          'onUpdate:value': (value) => { query.value = value || '' },
         })), settingField('mcp-tool-status-filter', t('toolStatus'), h(NSelect, {
           value: status.value,
           options: [{ label: t('allStatuses'), value: 'all' }, { label: t('available'), value: 'available' }, { label: t('prohibited'), value: 'prohibited' }],
           inputProps: { id: 'mcp-tool-status-filter', 'aria-labelledby': 'mcp-tool-status-filter-label', 'aria-describedby': 'mcp-tool-filter-results' },
-          'onUpdate:value': (value) => { status.value = value; page.value = 1 },
+          'onUpdate:value': (value) => { status.value = value },
         }))]),
         h('p', { id: 'mcp-tool-filter-results', class: 'mcp-hint', role: 'status', 'aria-atomic': 'true' },
           t('toolFilterResults').replace('{shown}', filtered.value.length).replace('{total}', props.tools.length)),
-        h('div', { class: 'mcp-tool-scroll', tabindex: 0, role: 'region', 'aria-labelledby': 'mcp-tool-list-title' }, [
-          h('table', { class: 'mcp-tool-table', 'aria-labelledby': 'mcp-tool-list-title' }, [
-            h('thead', [h('tr', ['toolName', 'toolSource', 'toolStatus'].map((key) => h('th', { scope: 'col' }, t(key))))]),
-            h('tbody', filtered.value.length ? visible.value.map((tool) => h('tr', { key: tool.name, 'data-tool': tool.name }, [
-              h('td', { 'data-label': t('toolName') }, [h('code', tool.name), tool.title ? h('strong', tool.title) : null, h('p', tool.description)]),
-              h('td', { 'data-label': t('toolSource') }, tool.sourceName),
-              h('td', { 'data-label': t('toolStatus') }, [h(NTag, { type: tool.allowed ? 'success' : 'warning', bordered: false }, { default: () => tool.allowed ? t('available') : t('prohibited') })]),
-            ])) : [h('tr', [h('td', { colspan: 3 }, t('toolsNoMatch'))])]),
-          ]),
-        ]),
-        filtered.value.length ? h('nav', { class: 'mcp-tool-pagination', 'aria-label': t('toolPagination') }, [
-          h(NPagination, { page: currentPage.value, pageSize: pageSize.value, itemCount: filtered.value.length,
-            pageSlot: 3, showSizePicker: true, pageSizes: [10, 20, 50].map((value) => ({ value, label: t('toolsPerPage').replace('{count}', value) })),
-            'onUpdate:page': (value) => { page.value = value },
-            'onUpdate:pageSize': (value) => { pageSize.value = value; page.value = 1 },
-          }),
-        ]) : null,
+        groups.value.length ? h('div', { class: 'mcp-source-list' }, groups.value.map((group) =>
+          h(ToolSourceGroup, { key: group.source, group }))) : h('p', { class: 'mcp-hint' }, t('toolsNoMatch')),
       ])
     },
   })
@@ -844,12 +886,18 @@
       .mcp-tool-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 180px); gap: 12px; align-items: end; }
       .mcp-tool-pagination { display: flex; justify-content: flex-end; min-width: 0; }
       .mcp-tool-pagination .n-pagination { flex-wrap: wrap; justify-content: flex-end; }
-      .mcp-tool-scroll { min-width: 0; overflow-x: auto; }
-      .mcp-tool-table { width: 100%; min-width: 560px; border-collapse: collapse; text-align: left; font-size: 13px; }
+      .mcp-source-list { display: grid; gap: 12px; }
+      .mcp-source-group { min-width: 0; border: 1px solid var(--n-border-color, #444); border-radius: 8px; }
+      .mcp-source-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px; }
+      .mcp-source-heading h4 { margin: 0; font-size: 14px; font-weight: 600; }
+      .mcp-source-details { min-height: 40px; }
+      .mcp-source-tools { min-width: 0; padding: 0 12px 12px; }
+      .mcp-source-tools .mcp-tool-pagination { margin-top: 12px; }
+      .mcp-tool-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
       .mcp-tool-table th, .mcp-tool-table td { padding: 12px 8px; border-bottom: 1px solid var(--n-border-color, #444); vertical-align: top; }
       .mcp-tool-table th { font-weight: 600; }
-      .mcp-tool-table td:first-child { width: 65%; overflow-wrap: anywhere; }
-      .mcp-tool-table td:nth-child(2), .mcp-tool-table td:nth-child(3) { white-space: nowrap; }
+      .mcp-tool-table td:first-child { width: 100%; overflow-wrap: anywhere; }
+      .mcp-tool-table td:nth-child(2) { white-space: nowrap; }
       .mcp-tool-table code, .mcp-tool-table strong { display: block; }
       .mcp-tool-table p { margin: 4px 0 0; color: var(--n-text-color-3, #888); line-height: 1.5; }
       .mcp-advanced-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 180ms cubic-bezier(.23, 1, .32, 1), opacity 140ms ease-out; }
@@ -859,17 +907,13 @@
       @media (max-width: 700px) {
         .mcp-card, .mcp-token-actions, .mcp-advanced-grid, .mcp-tool-filters { grid-template-columns: 1fr; }
         .mcp-token-actions .n-button { width: 100%; }
-        .mcp-tool-scroll { overflow-x: visible; }
         .mcp-tool-table { min-width: 0; display: block; border-collapse: separate; }
         .mcp-tool-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
         .mcp-tool-table tbody { display: grid; gap: 8px; }
         .mcp-tool-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px; border: 1px solid var(--n-border-color, #444); border-radius: 8px; }
         .mcp-tool-table td, .mcp-tool-table td:first-child { display: block; width: auto; padding: 0; border: 0; }
         .mcp-tool-table td:first-child { grid-column: 1 / -1; }
-        .mcp-tool-table td:nth-child(2) { color: var(--n-text-color-3, #888); white-space: normal; }
-        .mcp-tool-table td:nth-child(2)::before { content: attr(data-label) ' · '; color: var(--n-text-color-3, #888); }
-        .mcp-tool-table td:nth-child(3) { justify-self: end; align-self: start; }
-        .mcp-tool-table td[colspan] { grid-column: 1 / -1; }
+        .mcp-tool-table td:nth-child(2) { grid-column: 2; justify-self: end; align-self: start; }
       }
       @media (prefers-reduced-motion: reduce) { .mcp-advanced-body { transition: none; } }
     `],

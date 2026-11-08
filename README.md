@@ -90,12 +90,14 @@ settings to apply changes. Prohibited tools are hidden from MCP clients and dire
 cached names are rejected. Built-in capture, HID and ATX tools remain available.
 The access list shows plugins with registered tools and plugins with saved
 overrides; a retained override without tools is labeled accordingly. The tool
-table shows built-in and plugin tool names, descriptions, sources and availability
-under the saved settings.
+list groups tools by source, with each source's tool count and a Details button.
+Sources start collapsed; expand one to see tool names, descriptions and availability
+under the saved settings, then use Collapse to close it.
 Search matches tool names, descriptions and sources without regard to case.
 Combine it with the All, Available or Prohibited status filter.
-Results are paginated with 10, 20 or 50 tools per page. Changing search or status
-returns to the first page.
+Only matching tools and their sources are shown. Each expanded source with more
+than 10 matching tools has its own pagination, with 10, 20 or 50 tools per page.
+Changing search or status returns each source to its first page.
 Revisiting the settings page in the same tab reuses
 the list for one minute, then refreshes it automatically on entry. Saving settings
 or changing plugins invalidates it; Refresh tools always fetches the latest list.
