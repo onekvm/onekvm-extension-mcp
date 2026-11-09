@@ -2,9 +2,9 @@
   "manifest_version": 1,
   "id": "mcp",
   "i18n": {
-    "default": {"name": "MCP", "description": "Lets authenticated AI agents capture the OneKVM screen and operate input and available ATX controls through MCP."},
-    "zh": {"name": "MCP", "description": "让经过鉴权的 AI Agent 通过 MCP 截取 OneKVM 屏幕并操作输入设备和可用的 ATX 控制。"},
-    "zh-TW": {"name": "MCP", "description": "讓經過鑑權的 AI Agent 透過 MCP 擷取 OneKVM 螢幕並操作輸入裝置和可用的 ATX 控制。"}
+    "default": {"name": "MCP", "description": "Lets authorized AI assistants view the OneKVM screen and operate input and available ATX controls through MCP."},
+    "zh": {"name": "MCP", "description": "让已授权的 AI 助手通过 MCP 查看 OneKVM 画面、控制键鼠和执行可用的 ATX 操作。"},
+    "zh-TW": {"name": "MCP", "description": "讓已授權的 AI 助手透過 MCP 查看 OneKVM 畫面、控制鍵鼠和執行可用的 ATX 操作。"}
   },
   "version": "@VERSION@",
   "api_version": 2,
@@ -33,16 +33,16 @@
     "additionalProperties": false,
     "required": ["endpoint", "listen_mode", "port", "capture_timeout_seconds"],
     "properties": {
-      "tool_default_policy": {"type": "string", "title": "Default tool access", "enum": ["allow", "deny"], "default": "allow", "i18n": {"default": "Default tool access", "zh": "默认工具接入", "zh-TW": "預設工具接入"}},
-      "tool_allowed_plugins": {"type": "string", "title": "Allowed plugins", "default": "", "maxLength": 4096, "i18n": {"default": "Allowed plugins", "zh": "允许的插件", "zh-TW": "允許的外掛"}},
-      "tool_denied_plugins": {"type": "string", "title": "Prohibited plugins", "default": "", "maxLength": 4096, "i18n": {"default": "Prohibited plugins", "zh": "禁止的插件", "zh-TW": "禁止的外掛"}},
+      "tool_default_policy": {"type": "string", "title": "Default tool access policy", "enum": ["allow", "deny"], "default": "allow", "i18n": {"default": "Default tool access policy", "zh": "默认工具访问策略", "zh-TW": "預設工具存取策略"}},
+      "tool_allowed_plugins": {"type": "string", "title": "Allowed plugin IDs", "default": "", "maxLength": 4096, "i18n": {"default": "Allowed plugin IDs", "zh": "允许使用的插件 ID", "zh-TW": "允許使用的外掛 ID"}},
+      "tool_denied_plugins": {"type": "string", "title": "Prohibited plugin IDs", "default": "", "maxLength": 4096, "i18n": {"default": "Prohibited plugin IDs", "zh": "禁止使用的插件 ID", "zh-TW": "禁止使用的外掛 ID"}},
       "endpoint": {"type": "string", "title": "MCP endpoint", "default": "/plugins/mcp", "maxLength": 64, "readOnly": true, "i18n": {"default": "MCP endpoint", "zh": "MCP 端点", "zh-TW": "MCP 端點"}},
       "listen_mode": {"type": "string", "title": "Listen interface", "enum": ["all", "interface", "address"], "default": "all", "i18n": {"default": "Listen interface", "zh": "监听接口", "zh-TW": "監聽介面"}},
       "listen_interface": {"type": "string", "title": "Interface", "default": "", "maxLength": 15, "enabled_when": {"field": "listen_mode", "equals": "interface"}, "required_when": {"field": "listen_mode", "equals": "interface"}, "i18n": {"default": "Interface", "zh": "接口", "zh-TW": "介面"}},
       "listen_address": {"type": "string", "title": "IP address", "default": "", "maxLength": 64, "enabled_when": {"field": "listen_mode", "equals": "address"}, "required_when": {"field": "listen_mode", "equals": "address"}, "i18n": {"default": "IP address", "zh": "IP 地址", "zh-TW": "IP 位址"}},
       "port": {"type": "integer", "title": "Port", "default": 9710, "minimum": 1024, "maximum": 65535, "i18n": {"default": "Port", "zh": "端口", "zh-TW": "連接埠"}},
       "access_token": {"type": "string", "title": "Access token (at least 16 characters)", "format": "password", "default": "", "maxLength": 128, "i18n": {"default": "Access token (at least 16 characters)", "zh": "访问令牌（至少 16 个字符）", "zh-TW": "存取權杖（至少 16 個字元）"}},
-      "capture_timeout_seconds": {"type": "integer", "title": "Screen capture timeout (seconds)", "default": 5, "minimum": 1, "maximum": 15, "i18n": {"default": "Screen capture timeout (seconds)", "zh": "屏幕截图超时（秒）", "zh-TW": "螢幕擷取逾時（秒）"}}
+      "capture_timeout_seconds": {"type": "integer", "title": "Screen capture timeout (seconds)", "default": 5, "minimum": 1, "maximum": 15, "i18n": {"default": "Screen capture timeout (seconds)", "zh": "画面捕获超时（秒）", "zh-TW": "畫面擷取逾時（秒）"}}
     }
   },
   "secret_fields": ["/access_token"],
