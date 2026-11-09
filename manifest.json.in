@@ -15,7 +15,7 @@
   "entrypoint": "bin/onekvm-mcp",
   "permissions": ["network", "network-info"],
   "capabilities": ["video.mjpeg", "hid", "atx", "extensions.contributions"],
-  "extension_points": [{"id": "mcp.tool", "version": 1}],
+  "extension_points": [{"id": "extend.mcp", "version": 1, "aliases": ["mcp.tool"]}],
   "methods": [{"name": "tools", "command": ["bin/onekvm-mcp", "--tools"], "timeout_seconds": 20}],
   "services": [{
     "id": "server",

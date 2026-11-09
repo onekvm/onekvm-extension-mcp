@@ -63,6 +63,20 @@ inline std::string StringField(json_object *object, const char *key) {
   return std::string(json_object_get_string(value), json_object_get_string_len(value));
 }
 
+// Core uses null for indicators that the device does not provide.
+inline bool ReadIndicator(json_object *root, const char *key, bool &present, bool &enabled) {
+  present = false;
+  enabled = false;
+  json_object *value = nullptr;
+  if (!json_object_object_get_ex(root, key, &value) || json_object_is_type(value, json_type_null))
+    return true;
+  if (!json_object_is_type(value, json_type_boolean))
+    return false;
+  present = true;
+  enabled = json_object_get_boolean(value) != 0;
+  return true;
+}
+
 struct ContributedTool {
   std::string id;
   std::string source;
@@ -75,7 +89,7 @@ struct ContributedTool {
 };
 
 inline bool ReadContributedTool(json_object *entry, ContributedTool &tool) {
-  if (!json_object_is_type(entry, json_type_object) || StringField(entry, "point") != "mcp.tool")
+  if (!json_object_is_type(entry, json_type_object) || StringField(entry, "point") != "extend.mcp")
     return false;
   tool.source = StringField(entry, "source");
   tool.id = StringField(entry, "id");

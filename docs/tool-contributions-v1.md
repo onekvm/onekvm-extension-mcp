@@ -1,6 +1,10 @@
 # MCP tool contributions v1
 
-MCP publishes the manifest extension point `mcp.tool`, version 1. It requires a
+MCP publishes the manifest extension point `extend.mcp`, version 1, owned by the
+`mcp` plugin. `mcp.tool` remains a declared compatibility alias: the host merges
+old and new contributors and deduplicates their local IDs. Tool names and
+argument/result contracts are unchanged. Install the registry-capable host and
+Core before upgrading the MCP provider or contributor declarations. It requires a
 Core version with the local contribution bridge described in
 `onekvm-core/docs/extension-contributions-v1.md`.
 
@@ -10,7 +14,7 @@ Contributors declare a public method and one contribution per tool:
 {
   "methods": [{"name": "status", "command": ["bin/status"]}],
   "contributions": [{
-    "point": "mcp.tool",
+    "point": "extend.mcp",
     "id": "status",
     "version": 1,
     "method": "status",

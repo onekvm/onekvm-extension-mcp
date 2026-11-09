@@ -11,6 +11,14 @@ void Require(bool value, const char *message) {
 int main() {
   using namespace onekvm_mcp;
   try {
+    json_object *indicators = json_tokener_parse(R"({"pwr_led":true,"hdd_led":null,"off":false,"invalid":"false"})");
+    bool present = false, enabled = false;
+    Require(ReadIndicator(indicators, "pwr_led", present, enabled) && present && enabled, "available power indicator is readable");
+    Require(ReadIndicator(indicators, "hdd_led", present, enabled) && !present, "unsupported null indicator is unavailable");
+    Require(ReadIndicator(indicators, "missing", present, enabled) && !present, "missing indicator is unavailable");
+    Require(ReadIndicator(indicators, "off", present, enabled) && present && !enabled, "off differs from unavailable");
+    Require(!ReadIndicator(indicators, "invalid", present, enabled), "malformed indicator is rejected");
+    json_object_put(indicators);
     Config config;
     Require(AllowsPlugin(config, "example"), "existing settings default to allowing plugins");
     config.tool_denied_plugins = "firewall, example";
@@ -27,7 +35,7 @@ int main() {
       Require(!ValidToolPolicy(config), "malformed rule is rejected");
       Require(!AllowsPlugin(config, "other"), "malformed policy fails closed");
     }
-    json_object *entry = json_tokener_parse(R"({"point":"mcp.tool","id":"example/status","source":"example","version":1,"generation":9,"method":"read_status","data":{"description":"Read status","inputSchema":{"type":"object","properties":{}}}})");
+    json_object *entry = json_tokener_parse(R"({"point":"extend.mcp","id":"example/status","source":"example","version":1,"generation":9,"method":"read_status","data":{"description":"Read status","inputSchema":{"type":"object","properties":{}}}})");
     ContributedTool tool;
     Require(ReadContributedTool(entry, tool), "valid declared contribution");
     Require(tool.name == "example__status" && tool.generation == 9, "stable namespaced name");

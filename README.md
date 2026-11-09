@@ -106,7 +106,7 @@ Prohibited tools remain
 visible here for management and are excluded from MCP client discovery and calls.
 Clients that cache tool lists can refresh the list or reconnect to update their display.
 
-Plugins declare tools through `mcp.tool`, with names `<plugin-id>__<tool-id>`.
+Plugins declare tools through `extend.mcp`, with names `<plugin-id>__<tool-id>`.
 See the [tool contribution protocol](docs/tool-contributions-v1.md) for arguments,
 results and a minimal example.
 

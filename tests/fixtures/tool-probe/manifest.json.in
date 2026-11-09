@@ -12,7 +12,7 @@
   "secret_fields": [],
   "methods": [{"name": "status", "command": ["bin/probe"], "timeout_seconds": 3}],
   "contributions": [{
-    "point": "mcp.tool", "id": "status", "version": 1, "method": "status",
+    "point": "extend.mcp", "id": "status", "version": 1, "method": "status",
     "data": {"description": "Read the probe invocation counter.", "inputSchema": {"type": "object", "additionalProperties": false, "properties": {}}}
   }],
   "healthcheck": {"type": "exec", "command": ["bin/probe", "--health"], "timeout_seconds": 3},

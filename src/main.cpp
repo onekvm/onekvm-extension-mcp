@@ -461,7 +461,7 @@ bool LocalMCPRequest(std::string_view payload, std::string &response_body,
 
 Json ToolRegistry(const Identity &identity, std::string &error) {
   std::string body;
-  if (!ControlRequest(identity, "GET", "/api/extensions/points/mcp.tool", "", 10,
+  if (!ControlRequest(identity, "GET", "/api/extensions/points/extend.mcp", "", 10,
                       body, error, kMaxRequestBytes + (64U << 10)))
     return {};
   Json registry = ParseJSON(body, error);
@@ -499,23 +499,13 @@ bool ReadATXStatus(const Identity &identity, ATXStatus &status,
     return false;
   }
   status.available = json_object_get_boolean(available) != 0;
-  json_object *power_led = nullptr;
-  if (json_object_object_get_ex(root.get(), "pwr_led", &power_led)) {
-    if (!json_object_is_type(power_led, json_type_boolean)) {
-      error = "ATX power LED status is invalid";
-      return false;
-    }
-    status.has_power_led = true;
-    status.power_led = json_object_get_boolean(power_led) != 0;
+  if (!onekvm_mcp::ReadIndicator(root.get(), "pwr_led", status.has_power_led, status.power_led)) {
+    error = "ATX power LED status is invalid";
+    return false;
   }
-  json_object *disk_led = nullptr;
-  if (json_object_object_get_ex(root.get(), "hdd_led", &disk_led)) {
-    if (!json_object_is_type(disk_led, json_type_boolean)) {
-      error = "ATX disk LED status is invalid";
-      return false;
-    }
-    status.has_disk_led = true;
-    status.disk_led = json_object_get_boolean(disk_led) != 0;
+  if (!onekvm_mcp::ReadIndicator(root.get(), "hdd_led", status.has_disk_led, status.disk_led)) {
+    error = "ATX disk LED status is invalid";
+    return false;
   }
   return true;
 }
@@ -1072,7 +1062,7 @@ json_object *CallContributedTool(const std::string &name, json_object *arguments
     json_object_object_add(request.get(), "arguments", json_object_get(arguments));
     const char *payload = json_object_to_json_string_ext(request.get(), JSON_C_TO_STRING_PLAIN);
     std::string body;
-    if (!ControlRequest(identity, "POST", "/api/extensions/points/mcp.tool/invoke", payload,
+    if (!ControlRequest(identity, "POST", "/api/extensions/points/extend.mcp/invoke", payload,
                         130, body, error, kMaxRequestBytes + (64U << 10)))
       return ToolResult(error, true);
     Json output = ParseJSON(body + "\n", error);
